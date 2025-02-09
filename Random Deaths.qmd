@@ -1,0 +1,72 @@
+
+```{r}
+library(tidyverse)
+```
+
+
+Using the 2021 Actuarial Table from the Social Security Administration, we are able to find death by age data.
+```{r}
+Social_Security_Deaths_2021 <- read_csv(".github/workflows/Social Security Deaths 2021.csv")
+```
+We can normalize this so that total deaths is a cummulative probability distribution of death from ages 0 to 119.
+
+```{r}
+cdf_data <- Social_Security_Deaths_2021 |> 
+  mutate(cdf = `total deaths`/205000) 
+  
+ggplot(cdf_data, aes(x = age, y = cdf))+
+         geom_line()
+```
+It is possible to generate data according to a cumulative distribution function through a process known as inverse transform sampling. 
+
+We generate $U$~ Unif$(0,1)$ which is a random number between 0 and 1 and acts as kind of target probability.To generate a random age in the set, we choose the least $X$ such that $F(X) \le U$.  That is, we choose the greatest age $X$ such that the probability of a random death occuring before $X$ is less than or equal to the uniform probability generation. With this method, any percentile of age at death is equally likely, but actual age at deaths are exactly as likely as the original distribution. 
+
+```{r}
+set.seed(4747)
+
+# Function for inverse transform sampling
+inverse_transform_sampling <- function(cdf_data, n_samples) {
+  # Step 1: Generate n uniform samples between 0 and 1
+  uniform_randoms <- runif(n_samples)
+  
+  # Step 2: For each random number, find the corresponding value in the cdf
+  sampled_values <- sapply(uniform_randoms, function(u) {
+    # Find the smallest `age` where `cdf >= u`
+    age_sampled <- cdf_data$age[which.min(abs(cdf_data$cdf - u))]
+    return(age_sampled)
+  })
+  
+  return(sampled_values)
+}
+```
+
+Below, see that 100,000 death ages have been generated using this method.  We can compare their density (in red) to the true probability density of the actuarial table (in blue). Unlike the cumulative distribution, this shows probability of death at any single age. 
+
+```{r echo=false}
+set.seed(4747)
+n_samples <- 100000
+random_samples <- inverse_transform_sampling(cdf_data, n_samples)
+
+
+true_prob_deaths <- Social_Security_Deaths_2021 |>
+  mutate(deaths_at_age = `total deaths` - lag(`total deaths`, default = first(`total deaths`))) |>
+  mutate(prob_of_death = deaths_at_age/205000)
+  
+  
+# Create a data frame of generated ages for histogram
+generated_ages_df <- data.frame(age = random_samples)
+
+# Plot
+ggplot() +
+  #pdf (line)
+  geom_line(data = true_prob_deaths, aes(x = age, y = prob_of_death), color = "blue", size = 1) +
+  
+  #generated ages (density)
+  geom_density(data = generated_ages_df, aes(x = age), fill = "red", alpha = 0.5) +
+  
+  labs(title = "Comparison of Probability of Death vs Generated Ages",
+       x = "Age", 
+       y = "Density") 
+
+```
+

@@ -1,0 +1,73 @@
+---
+title: "Production Function/Wage Heterogeneity"
+format: pdf
+editor: visual
+---
+
+Traditionally, OLG models follow the Cobb-Douglas production function as a means to determine wages.
+
+$$
+Y = K^{\alpha}L^{(1-\alpha)}
+$$
+
+The marginal product of labor (wage rate) is found by differentiating output with respect to labor.
+
+$$
+MPL = (1-\alpha)(Y)/L
+$$
+
+This approach works well in simpler models, but the singular wage rate has constraints. When introducing class, and therefore wage, heterogeneity, this approach needs to be altered.
+
+For now, we'll assume that different wages are a result of different marginal products of labor. Rich workers might have higher productivity as a result of education or skill differences. Therefore, we can say there are two types of labor contributing the the economy, rich labor $L_r$ and poor labor $L_p$. A new production function can be defined
+
+$$
+Y = K^\alpha (L_r^\beta L_p^{(\gamma)})
+$$
+
+with the condition that $\alpha + \beta + \gamma = 1$ in order to maintain constant returns to scale. Here, labor types are combined multiplicativley, implying these two types of labor complement each other. That is, both types of labor are necessary for the economy to function. Indeed, the productivity of many high-wage workers (e.g. executives) is dependent on the labor of lower-wage workers (e.g. administrative staff).
+
+As in the case of homogeneity, marginal products of labor are derived by differentiating.
+
+$$
+MPL_r = \frac{\partial Y}{\partial L_r} = \beta K^\alpha L_r^{(1-\beta)} L_p^\gamma
+$$
+
+$$
+MPL_p = \frac{\partial Y}{\partial L_p} = \gamma K^\alpha L_r^\beta L_p^{(1-\gamma)}
+$$
+
+```{r}
+### Cobb-Douglas parameters, must sum to 1
+
+alpha <- 0.3
+beta <- 0.5
+gamma <- 0.2
+
+# Function to calculate the marginal product of labor (wage) using the Cobb-Douglas production function
+update_wages <- function(wages) {
+  #separating working agents into ricch and poor groups
+  rich_agents <- wages[wages == rich_wage]  # Agents earning the rich wage
+  poor_agents <- wages[wages == poor_wage]  # Agents earning the poor wage
+  
+  
+  # Compute total capital (wealth)
+  total_capital <- compute_capital(working, retired)
+  #rich_capital <- sum(rich_agents)  # Capital for rich agents
+ # poor_capital <- sum(poor_agents)  # Capital for poor agents
+  
+  
+  # Total labor (number of working agents)
+  #labor <- total_labor(wages)
+  rich_labor <- length(rich_agents)
+  poor_labor <- length(poor_agents)
+  
+  # Cobb-Douglas production function for the marginal product of labor (MPL)
+  total_output <- total_capital^alpha * rich_labor^beta * poor_labor^gamma  # Total output in the economy
+  wage <- (1 - alpha) * total_output / labor  # MPL = wage per worker
+  
+  new_rich_wage <- beta * total_output * rich_labor^(1-beta) * poor_labor^gamma
+  new_poor_wage <- gamma * total_output * rich_labor^beta * poor_labor^(1-gamma)
+  return(c(new_rich_wage,new_poor_wage))
+}
+
+```

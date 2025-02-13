@@ -1,3 +1,9 @@
+---
+title: "Production Function/Wage Heterogeneity"
+format: pdf
+editor: visual
+---
+
 
 ```{r}
 library(tidyverse)
@@ -15,7 +21,10 @@ cdf_data <- Social_Security_Deaths_2021 |>
   mutate(cdf = `total deaths`/205000) 
   
 ggplot(cdf_data, aes(x = age, y = cdf))+
-         geom_line()
+         geom_line()+
+  labs(title = "Cummulative Probability of Death by Age",
+       x = "Age", 
+       y = "CDF") 
 ```
 It is possible to generate data according to a cumulative distribution function through a process known as inverse transform sampling. 
 
@@ -68,5 +77,24 @@ ggplot() +
        x = "Age", 
        y = "Density") 
 
+```
+To apply this to the model, we can create a vector representing every individual's death age determined by inverse transform sampling of the Social Security distribution.
+```{r}
+rich_population <- 5000
+poor_population <- 10000
+death_age <- inverse_transform_sampling(cdf_data, rich_population+poor_population)
+```
+We transform this vector with a piecewise function of death age to obtain what fraction of total potential savings the individual leaves behind for the next generation. 
+```{r}
+#piecewise bequest rate definition:
+#if death age (da) <= 20, br = 0
+#if 20< da < 60, br = 2.5 (da/100) - 0.5
+#if 60< da, br = -2.5(da/100) + 0.5
+
+br <- ifelse(death_age < 20, 0, 
+             ifelse(death_age < 60, 2.5 * (death_age / 100) - 0.5,
+                    ifelse(death_age < 100, -2.5 * (death_age / 100) + 2.5, 0)
+             )
+)
 ```
 

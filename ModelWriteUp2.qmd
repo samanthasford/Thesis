@@ -1,0 +1,3932 @@
+---
+title: ""
+author: ""
+format: 
+  pdf:
+    #toc: true
+    number-sections: true
+    colorlinks: FALSE
+    fontsize: 15 pts
+editor: visual
+bibliography: references.bib
+nocite: |
+  @*
+execute: 
+  warning: FALSE
+  echo: FALSE
+---
+
+```{r, include=FALSE}
+library(tidyverse)
+```
+
+```{=latex}
+\begin{titlepage}
+\centering
+\vspace*{3cm}
+
+{\Huge\bfseries Built to Last: Intergenerational Transfers and the Architecture of Inequality \par}
+
+\vspace{2cm}
+
+{\Large Samantha Ford \par}
+
+\vspace{1.5cm}
+
+Submitted to Scripps College\\
+in Partial Fulfillment of the Degree of\\
+Bachelor of Arts
+
+\vspace{1.5cm}
+
+Readers:\\
+Professor Patrick Van Horn\\
+Professor Winston Ou
+
+\vfill
+
+May 2025
+
+\end{titlepage}
+```
+
+## Abstract
+
+This paper explores how altruistic motivations around bequests affect the distribution of wealth and consumption across generations. Using a two-period overlapping generations model with stochastic inheritance and distinct labor types, agents make decisions about consumption, savings, and bequests under CRRA utility. Altruism is modeled as a separate utility component, allowing the strength of intentional bequesting to vary across simulations.
+
+Simulation results show that altruism reduces within-group wealth inequality: both rich and poor agents exhibit tighter, less skewed wealth distributions. However, between-group inequality increases, as rich agents capture a larger share of total wealth. The net effect is a modest decline in overall wealth inequality, as measured by the Gini coefficient. Consumption inequality also falls slightly, driven by high-wealth agents reducing their consumption in order to leave larger bequests. Altruism amplifies the incentive to save rather than spend.
+
+Taken together, these findings show that altruism doesn’t uniformly reduce inequality, it redistributes it.
+
+## Acknowledgements
+
+I am grateful to my thesis readers, Professors Patrick Van Horn and Winston Ou, for their thoughtful feedback, guidance, and encouragement throughout this process. I also want to thank my peer editors and fellow students, Elena Creason and Kiana Seva, for their valuable suggestions, critical questions, and support during the writing and revision stages. This project has benefited greatly from their close reading and collaborative spirit.
+
+\newpage
+
+```{=latex}
+\tableofcontents
+\newpage
+```
+
+# Introduction
+
+Intergenerational wealth transfers are widely believed to be a major contributor to wealth inequality. Inheritances disproportionately benefit individuals from wealthy families, reinforcing advantages like higher education, stronger professional networks, and greater capacity for investment and risk-taking [@salas-rojo2022]. From this perspective, inheritance looks like an inequality-amplifying force.
+
+However, the economic literature is divided. Some scholars argue that because inheritance is often split among several heirs, and because the timing and size of transfers are shaped by longevity, it can also have equalizing effects. This tension is the starting point for the current analysis.
+
+Stiglitz (1969) was one of the first to model the potential for inheritance to reduce inequality. Assuming linear consumption functions and equal division of estates, he proposed that intra-family transfers could compress wealth differences across generations. Later work with Atkinson (1980) added variation in earnings and savings behavior, but still maintained that inheritances could serve as insurance for lower-earning children of wealthy parents.
+
+Later studies emphasized the role of longevity. Gokhale, Kotlikoff, Sefton, and Weale (2001) argue that because lifespan is more randomly distributed than income, the length of parental survival becomes another channel through which inheritance affects inequality. Longer-lived parents reduce the size of their bequests through consumption, especially in middle- and lower-wealth households. For wealthier families, this effect is smaller. As a result, the distributional effects are mixed. Elinder, Erixson, and Waldenström (2018) reach a similar conclusion: inheritances tend to reduce relative inequality, giving proportionally larger boosts to poorer recipients, but increase absolute dispersion, since wealthier heirs still receive much larger transfers.
+
+Another area of debate is what drives bequest behavior. Some models assume bequests are unintended, arising because individuals die before spending all their wealth. In this case, inheritances are mainly shaped by longevity, and estate taxes or saving incentives don’t substantially change outcomes (Jiang, 2010). Other models assume bequests are intentional, with agents planning to transfer wealth as part of lifetime decision-making.
+
+The empirical evidence is mixed. Boskin and Kotlikoff (1985) and Hurd (2002) find limited support for strong altruistic behavior, suggesting that most savings are precautionary. On the other hand, Bernheim (1991) shows that older households shift assets into more bequeathable forms, and Kopczuk and Lupton (2007) estimate that around half of observed bequests reflect intentional planning.
+
+Despite this, many economic models leave out altruism for tractability. But if bequests are even partly intentional, omitting altruism leaves out a key mechanism in how wealth is accumulated and passed down.
+
+
+# Model
+
+## Overview and Demographics
+
+This is an agent-based simulation model of intergenerational wealth dynamics with two-period overlapping generations. It includes heterogeneous labor, stochastic class determination, and stochastic lifespan. Consumption, savings, and bequesting behaviors are endogenous to the agent optimization problem, while factors such as interest rates and wage rates are endogenous within a Cobb-Douglas framework.
+
+The model is structured such that agents may live for two discrete time periods, $t$ and $t+1$. In the first period, agents are young and earn either a high or low wage, derived from a modified Cobb-Douglas production function. An agent's wage type is stochastically determined, with a preference for matching their parent's wage type. During this period, agents consume and save portions of their income, as determined by the optimization problem.
+
+In the second period, agents retire and no longer work. Their wealth in this period depends on savings from the first period, capital gains (endogenous through the Cobb-Douglas framework), and the bequest they receive from the previous generation. As one generation retires, a new generation enters its young period, resulting in two overlapping generations at any point in time.
+
+```{r, echo=FALSE}
+#population counts
+rich_population <- 50
+poor_population <- 100
+#initial wages
+rich_wage <- 0.45
+poor_wage <- 0.13
+
+```
+
+```{r, echo = FALSE}
+#| label: fig-demog
+#| fig-cap: "Time period structure of generations"
+#| fig-pos: 'H'
+#| echo: false
+#| message: false
+#| warning: false
+
+library(ggplot2)
+library(dplyr)
+
+
+generations <- data.frame(
+  generation = rep(1:3, each = 2),  # Only two generations
+  period = rep(c("young", "old"), times = 3),  # alternating young and old
+  start_time = c(0, 1, 1, 2,2,3),  # start times for young and old periods
+  end_time = c(1,2,2,3,3,4)  # end times for young and old periods
+)
+
+generations$generation <- factor(generations$generation)
+
+ggplot(generations, aes(y = generation, xmin = start_time, xmax = end_time, color = period)) +
+  geom_errorbarh(height = 0.4, linewidth = 1.5) +  # Use error bars to represent time periods
+  scale_color_manual(values = c("young" = "#F8766d", "old" = "#00bfc4")) +
+  theme_minimal() +
+  labs(x = "Time", y = "Generation", color = "Period") +
+  theme(axis.text.y = element_text(size = 12),
+        axis.title = element_text(size = 14),
+        legend.position = "bottom") +
+  #ggtitle("Time-Period Structure of Generations") +
+  scale_x_continuous(breaks = seq(0, 15, by = 1))  # Adjust x-axis for time
+
+```
+
+## Class Determination
+
+Each new agent is assigned a class type ("rich" or "poor") which determines their wage level. Class status is inherited probabilistically: agents are more likely to remain in their parent’s class, but class mobility is possible. The probabilities are chosen so that the long-run distribution of class types stabilizes at approximately 25% rich and 75% poor, consistent with a two-state Markov process (see Appendix A).
+
+The stochastic procedure used to implement this in simulation is described in Appendix B. We considered alternative ways of modeling mobility, such as tying class status to parental wealth, but the Markov process provides a tractable structure that keeps the simulation consistent and the population proportions stable over time.
+
+```{r, echo = FALSE}
+prob_rich_to_poor <- 0.1 
+prob_poor_to_rich <- 0.033333
+
+
+update_class <- function(type) {
+  new_type <- ifelse(
+    type == "poor",
+    ifelse(runif(length(type)) < prob_poor_to_rich, "rich", "poor"),
+    ifelse(runif(length(type)) < prob_rich_to_poor, "poor", "rich")
+  )
+  return(new_type)
+}
+```
+
+## Production
+
+The output of any firm in the model economy is produced using a three-factor Cobb-Douglas production function, which takes in capital, $K$, and two distinct classes of labor (rich labor, $L_r$, and poor labor, $L_p$,) as inputs.
+
+$$
+Y = K^{\alpha} L_r^{\beta} L_p^{\gamma}
+$$
+
+The exponents $\alpha, \beta$ and $\gamma$ represent the elasticity of output with respect to capital, rich labor, and poor labor, respectively. For example, if $\alpha = 0.3$, then a 1% increase in capital, with other inputs constant, raises output by 0.3%. Interpretations of $\beta$ and $\gamma$ are symmetric. 
+
+This is a three-factor Cobb-Douglas function, sometimes used in models with material inputs or sectoral differentiation [@generalizedcb]. It may also be traced to Gary Becker’s applications to household production and gendered labor division [@becker1973]. 
+
+The multiplicative structure of the production function means that all three inputs, capital, rich labor, and poor labor, are essential. If any one of them is zero, output drops to zero as well. So while the inputs can be traded off at the margin to some extent, production can’t happen without some amount of each. In this way, the inputs (and thus types of labor) and complementary.
+
+To retain constant returns to scale, we impose the condition:
+
+$$
+\alpha + \beta + \gamma = 1
+$$
+
+Under this condition, if all inputs are scaled by the same factor, output scales by that factor as well. For a simple proof of this, see Appendix A.
+
+### Firm Optimization and First Order Conditions
+
+Firms are assumed to operate in perfectly competitive markets. Therefore, firms do not set prices but instead take the rental rate of capital $r$, the wage for rich labor $w_r$, and the wage for poor labor $w_p$ as given. Given thess, any firm chooses how much capital $K$, rich labor $L_R$, and poor labor $L_p$ to hire in order to maximize profit. Profit, $\Pi$, is defined as the value of output minus the total cost of inputs:
+
+$$
+\Pi =  K^{\alpha} L_r^{\beta} L_p^{\gamma} - rK - w_r L_r - w_p L_p
+$$
+Thus, the firm's objective is:
+$$
+\max_{K, L_r, L_p} \left\{ K^{\alpha} L_r^{\beta} L_p^{\gamma} - rK - w_r L_r - w_p L_p \right\}
+$$
+
+The first-order conditions are derived by taking partial derivatives of the profit function with respect to each input and setting them equal to zero (i.e., choosing each input such that marginal revenue equals marginal cost). These first-order conditions describe the optimal demand for each input—how much capital or labor a firm would hire given prevailing prices. Since firms are price takers, they accept the rental rate $r$, rich wage $w_r$, and poor wage $w_p$ as given. 
+
+The first-order condition with respect to capital is:
+
+$$
+\frac{\partial Y}{\partial K} = \alpha K^{\alpha - 1} L_r^\beta L_p^\gamma = r
+\quad \Rightarrow \quad r = \alpha \frac{Y}{K}
+$$
+
+With respect to rich labor:
+$$
+\frac{\partial Y}{\partial L_r} = \beta K^{\alpha} L_r^{\beta - 1} L_p^\gamma = w_r
+\quad \Rightarrow \quad w_r = \beta \frac{Y}{L_r}
+$$
+With respect to poor labor:
+$$
+\frac{\partial Y}{\partial L_p} = \gamma K^{\alpha} L_r^{\beta} L_p^{\gamma - 1} = w_p
+\quad \Rightarrow \quad w_p = \gamma \frac{Y}{L_p}
+$$
+These conditions describe optimal input demand for a single firm. Formal derivations of these conditions are provided in Appendix A.
+
+
+```{r, echo = FALSE}
+compute_capital <- function(old) {
+  sum(old$wealth)  # total economy savings
+}
+
+#cobb-douglas parameters
+alpha <- 0.3
+beta <- 0.35
+gamma <- 0.35
+
+
+update_wages <- function(young, old) {
+  total_capital <- compute_capital(old)
+  
+  rich_labor <- sum(young$type == "rich")
+  poor_labor <- sum(young$type == "poor")
+  
+  new_rich_wage <- beta * total_capital^alpha * rich_labor^(beta - 1) * poor_labor^gamma
+  new_poor_wage <- gamma * total_capital^alpha * rich_labor^beta * poor_labor^(gamma - 1)
+  
+  young$wages[young$type == "rich"] <- new_rich_wage
+  young$wages[young$type == "poor"] <- new_poor_wage
+  
+  return(young)
+}
+```
+
+```{r, echo = FALSE}
+### Update Savings
+update_savings <- function(young) {
+  young$savings <- young$wages * young$savings_rate
+  return(young)
+}
+```
+
+### Representative Firm and Equilibrium Factor Prices
+
+To connect firm-level optimization to macroeconomic outcomes, we will apply the framework of a representative firm.  This follows from constant returns to scale. Recall that CRS means any firm, regardless of size, can produce a proportionate amount of output by scaling its inputs. In other words, there are no scale advantages or disadvantages. When all firms face the same input prices and use the same production technology, they all choose the same cost-minimizing input ratios. As a result, firm-level behavior is homogeneous up to scale.
+
+This homogeneity allows us to treat the entire production sector as a single representative firm without loss of generality. The representative firm behaves exactly like any individual firm in the economy. It faces the same prices, uses the same production function, and chooses the same input ratios. Modeling a single firm making aggregate input and output decisions yields the same factor prices and aggregate quantities as would modeling a large number of identical firms. While we adopt this simplification for tractability, the logic generalizes to any economy with CRS production and homogenous firms under perfect competition [@moll2023].
+
+In equilibrium, factor prices adjust so that firms' marginal input valuations equal market prices, and total input demand matches aggregate supply. A full derivation showing that equilibrium factor payments exhaust output, implying zero profit under constant returns to scale, is provided in Appendix A. Because all firms are identical and constant returns to scale hold, aggregate production can be modeled by a single representative firm facing those same prices. The representative firm’s first-order conditions then describe the entire economy’s input allocation and factor pricing. 
+
+Hence, rich and poor wage rates are determined by the first-order conditions faced by the representative firm: 
+
+$$
+w_p = \frac{\partial Y}{\partial L_p} = \gamma \frac{Y}{L_p}
+$$
+
+$$
+w_r = \frac{\partial Y}{\partial L_r} = \beta \frac{Y}{L_r}
+$$
+
+The factor price of capital is slightly more complicated, because capital depreciates over time. Households receive only the net return on capital, which subtracts depreciation. Thus, the interest rate—or return on savings—is given by: 
+
+$$
+R* = \alpha \frac{Y}{K} - d
+$$
+
+The return on savings should equal the return on capital due to the no-arbitrage condition. If the return on savings were lower than the return on capital, households would invest in capital directly, increasing the capital supply and lowering its rental price. If the return on savings were higher, firms would reduce investment in capital, decreasing supply and raising the rental price. In equilibrium, the two returns must be equal. Thus, $R^*$ is the interest rate (return on savings), equal to $MPK - d$ [@groth2016].
+
+```{r, include = FALSE}
+Social_Security_Deaths_2021 <- read_csv(".github/workflows/Social Security Deaths 2021.csv")
+cdf_data <- Social_Security_Deaths_2021 |> 
+  mutate(cdf = `total deaths`/205000) 
+
+# Function for inverse transform sampling
+inverse_transform_sampling <- function(cdf_data, n_samples) {
+  uniform_randoms <- runif(n_samples)
+
+  sampled_values <- sapply(uniform_randoms, function(u) {
+    age_sampled <- cdf_data$age[min(which(cdf_data$cdf >= u))]  
+    return(age_sampled)
+  })
+  
+  return(sampled_values)
+}
+
+death_age <- inverse_transform_sampling(cdf_data, rich_population+poor_population)
+
+n_samples <- 100000
+random_samples <- inverse_transform_sampling(cdf_data, n_samples)
+
+
+true_prob_deaths <- Social_Security_Deaths_2021 |>
+  mutate(deaths_at_age = `total deaths` - lag(`total deaths`, default = first(`total deaths`))) |>
+  mutate(prob_of_death = deaths_at_age/205000)
+  
+  
+generated_ages_df <- data.frame(age = random_samples)
+
+```
+
+
+## Agent Optimization
+
+With the macro environment established and other variables accounted for, we enter the agent optimization problem. This is the method by which agents decide their consumption, saving, and bequesting behaviors.
+
+### Lifetime Optimization
+
+An agent's utility is given as
+
+$$
+U_t = u(c_t) + \delta u(c_{t+1}) + \zeta v(b_{t+1})
+$$
+
+where
+
+$U_t =$ total utility of an agent born at time $t$
+
+$u(c) =$ flow utility of consumption
+
+$c_t =$ consumption at time t
+
+$\delta \in (0,1) =$ discount factor
+
+$\zeta =$ coefficient for bequest motivation
+
+$v(b) =$ utility of leaving a bequest
+
+$b_{t+1} =$ bequest amount left by an agent born at time $t$, to be inherited by their child born at time $t+1$
+
+Total lifetime utility is the sum of several terms. The first term is utility from consumption in period 1, calculated using a flow utility function, which represents instantaneous utility at a given point in time. The next term uses the same flow utility function for consumption in period 2, discounted by a discount factor. This discount factor represents how much an agent values future consumption relative to current consumption, and can also be thought of as a measure of patience. If $\delta = 1$, an agent values future consumption equally to current consumption, and we would expect them to equalize consumption across periods. If $\delta = 0$, the agent does not value future consumption and would prefer to consume as much as possible in the first period rather than save. The last term captures the utility of leaving a bequest to future generations. The utility function $v(b_{t+1})$ represents how the bequest amount is valued, and the coefficient $\zeta$ determines its weight relative to consumption utility.
+
+The optimization problem is to maximize this lifetime utility function. Moving forward, there are two cases. The first is the case of non-orphans, whose parents die between the ages of 60 and 100.
+
+### Budget Constraints
+
+Lifetime utility is subject to two budget constraints: one in the young period $t$, and one in the old period $t+1$.
+
+Non-orphaned agents receive any bequests from their parents as they themselves enter retirement, at time $t+1$. Thus, in the young period, non-orphaned agents do not have access to their inheritance. They receive it at $t+1$.
+
+The young-period budget constraint is:
+
+$$
+c_t + s = w
+$$
+
+where
+
+$s =$ savings from wages
+
+$w =$ wages
+
+The old-period budget constraint is:
+
+$$
+c_{t+1} = R(s+b_t) - b_{t+1}
+$$
+
+where
+
+$R$ = interest rate (1 + $r$ − depreciation) $b_t$ = bequest amount inherited by an agent born at time $t$
+
+Here, old-period consumption equals savings from the young period plus inherited bequests (adjusted for interest), minus the amount the agent chooses to bequeath.
+
+In summary, a non-orphaned agent seeks to maximize lifetime utility as $\max U_t(c_t, b_{t+1})$ subject to these two budget constraints.
+
+### Expected Values and Nested Optimization
+
+Although agents in the model live for two periods (young and old), we incorporate mortality risk by assigning each agent a random age of death drawn from Social Security actuarial data. This random death age is unknown to the agent and reflects realistic variation in lifespan. In simulation, this is implemented using inverse transform sampling and affects whether an agent dies with unspent wealth (creating a bequest). Full details of stochastic mortality implementation are provided in the Appendix B.
+
+Agents plan their consumption and bequest amounts as if they will live their full potential lifespan. This reflects current best practices in retirement planning [@asppa2024]. However, due to the random death mechanism, most agents do not live to 100. In these cases, the actual bequest an agent receives from a parent, $b_t$, includes the planned bequest plus any unused consumption from the parent's remaining wealth. This will generally not equal the planned bequest.
+
+So, for non-orphaned agents (those whose parent is still alive when they enter the model), the optimization problem includes uncertainty in $b_t$. Each agent knows the planned bequest from their parent and the probability distribution of parental death ages. 
+
+For simplicity, we assume linear consumption within a period. For example, if an agent plans to consume $c_{t+1}$ and leave $b_{t+1}$, but dies at 80 instead of 100, they only consume half of what was planned and bequeath the rest. That is, actual consumption is $\frac{c_{t+1}}{2}$ and the realized bequest is $b_{t+1} + \frac{c_{t+1}}{2}$. For any death age $a$, actual bequest becomes $b_{t+1} + c_{t+1} \cdot \frac{100 - a}{40}$. This function, applied to the probability distribution of death ages, gives the distribution of realized bequests.
+
+Technically, $R$ is also unknown and endogenous in the model, but it stabilizes quickly. We assume agents treat $R$ as known and constant across periods, so both budget constraints use $R = R_t$.
+
+To summarize: in the young period, agents know their wage $w$, the utility functions $u(), v()$, parameters $\delta$, $\zeta$, $R$, and the distribution of future inheritance $b_t$. They do not know the exact value of $b_t$. They choose consumption $c_t$ and equivalently, savings $s = w - c_t$.
+
+In the old period, $b_t$ is realized. The agent then chooses $c_{t+1}$ and $b_{t+1}$ to maximize utility. That is:
+
+$$
+\max_{b_{t+1}} \{u(R(s+b_t)-b_{t+1})+v(b_{t+1})\}
+$$
+
+Thus, when choosing $c_t$ in the young period, the agent faces a nested optimization problem:
+
+$$
+\max_{c_{t}}\{ u(c_t) + \mathbb{E_{b_t}}[ \max_{b_{t+1}}\{ \delta u(R(w-c_t+b_t)-b_{t+1}) +\zeta v(b_{t+1})\}]\}
+$$
+
+Let
+
+$$
+b_t^{(i)} = b_{t} + c*_{t}\frac{100-i}{40}
+$$
+
+where $c*$ is the parent's consumption and $b_t^{(i)}$ is the realization of the parent's bequest amount at a certain death age, $i$.
+
+Then the optimization problem becomes
+
+$$
+\max_{c_{t}}\{ u(c_t) + \sum_i p_i [ \max_{b_{t+1}}\{ \delta u(R(w-c_t+b_t^{(i)})-b_{t+1}) +\zeta v(b_{t+1})\}]\}
+$$
+
+where $p_i$ is the probability of death at any age.
+
+For now, we will postpone defining our utility functions, but we will say that $u(), v()$ are differentiable, strictly increasing, and strictly concave. 
+
+To solve the inner optimization problem analytically, we have to meet the first-order condition, that:
+
+$$
+0 = \frac{d}{db_{t+1}} (\delta u(R(w-c_t+b_t^{(i)})-b_{t+1}) +\zeta v(b_{t+1}))
+$$
+
+With some manipulation, we find that
+
+```{=tex}
+\begin{align*}
+0 &=  \frac{d}{db_{t+1}}[\delta u(R(w-c_t+b_t)-b_{t+1}] + \frac{d}{db_{t+1}}[\zeta v(b_{t+1})] \\
+&= \delta\frac{d}{db_{t+1}}(R(w-c_t+b_t)-b_{t+1}) u'(R(w-c_t+b_t)-b_{t+1}) +\zeta v'(b_{t+1})\\
+&= \delta(-1)u'(R(w-c_t+b_t)-b_{t+1}) + \zeta v'(b_{t+1})\\
+\delta u'(R(w-c_t+b_t)-b_{t+1}) &= \zeta v'(b_{t+1})\\
+\delta u'(c_{t+1}) &= \zeta v'(b_{t+1})
+\end{align*}
+```
+So, our first-order condition leads us to say that the marginal utility of consumption in the second period, discounted by $\delta$ and and the marginal utility of leaving a bequest, discounted by $\zeta$ are equal at optimization.
+
+### CRRA Utility
+
+At this point, it is necessary to define utility functions $u()$ and $v()$. In order to solve the maximization problem analytically, I will be demonstrating a solution where $u()$ and $v()$ belong to the family of utility functions known as constant relative risk aversion (CRRA) utility functions. These are functions which take the form:
+
+$$
+u(c) = \frac{c^{1-\eta}-1}{1-\eta}
+$$
+
+This class of functions is also known as log utility functions. Interestingly, the first known modeling of utility functions can be traced back to Daniel Bernoulli in 1738 [@stearns2000]. Even then, he proposed that $U(x) = ln(x)$, where $x$ is wealth. Although the above function $u(c)$ is undefined when $c = 1$, the limit of $u(c)$ as $c$ goes to 1 is $ln(c)$ (proof in Appendix A). Despite its simplicity and age, $u(c) = ln(c)$ is still commonly used by many economists.
+
+CRRA functions give decreasing marginal utility and meet all of our other specifications. As the name suggests, they also maintain constant risk aversion. In a continuous model, this means that overall consumption and savings behaviors are determined by fixed proportions, rather than wealth itself. In our model, this means that intertemporal consumption decisions are proportional within an agent's lifespan.
+
+As an illustration, consider the deterministic version of the lifetime utility function:
+
+$$
+U_t = u(c_t) + \delta u(c_{t+1}) + \zeta v(b_{t+1})
+$$
+
+Here, wages, interest rate and bequest inherited are known. With substitution, we can maximize on the variables $c_t, b_{t+1}$. That is, consumption in the first period and bequest left to the next generation. Since $s = w-c_t$, we have
+
+$$
+U_t = u(c_t) + \delta u(R(w-c_t+b_t)-b_{t+1}) + \zeta v(b_{t+1})
+$$
+
+and we want to solve for
+
+$$
+\max{c_t, b_{t+1}} [
+u(c_t) + \delta u(c_{t+1}) + \zeta v(b_{t+1})]
+$$
+
+The first-order condition of $c_t$ is that $\frac{\partial{U}}{\partial{c_t}} = 0$ .
+
+```{=tex}
+\begin{align*}
+\frac{\partial{U}}{\partial{c_t}} &= \frac{d}{d{c_t}}[u(c_t)] + \frac{d}{d{c_t}}[\delta u(R(w-c_t+b_t)-b_{t+1}] + \frac{d}{d{c_t}}[\zeta v(b_{t+1})] \\
+&= u'(c_t)+\delta\frac{d}{d{c_t}}(R(w-c_t+b_t)-b_{t+1}) u'(R(w-c_t+b_t)-b_{t+1}) +\zeta \frac{d}{d{c_t}}v(b_{t+1})\\
+0&= u'(c_t) - \delta R u'(R(w-c_t+b_t)-b_{t+1})
+\end{align*}
+```
+This gives us the Euler equation for consumption smoothing [@parker2018].
+
+$$
+u'(c_t) = \delta R u'(c_{t+1})
+$$
+
+As we would expect, optimal consumption in both periods is chosen such that the marginal utility of consumption is equal when adjusted for by the discount factor.
+
+With CRRA utility, the Euler equation becomes:
+
+```{=tex}
+\begin{align*}
+c_t^{-\eta} &= \delta R c_{t+1}^{-\eta}\\
+(\frac{c_{t+1}}{c_t})^\eta &= \delta R\\
+\frac{c_{t+1}}{c_t} &= (\delta R)^{\frac{1}{\eta}}
+\end{align*}
+```
+The growth rate of consumption between periods (within an agents life) depends only on $\delta$, $r$, and $\eta$, not wealth.
+
+This does not mean that agents consume the same proportion of their wealth regardless of income/class type. It only means that the ratio of consumption between periods should be equal.
+
+In a continuous, homogeneous economic model, $c_{t+1}$ and $c_t$ are overall consumption in an economy, not tied to a particular agent. This means that a constant $\frac{c_{t+1}}{c_t}$ translates to a stable constant growth in consumption, a desired effect. In our model, this result is somewhat problematic because we might expect that poorer agents are more financially constrained and consume less in the old time period proportional to young consumption when compared to rich agents.
+
+Regardless, CRRA functions make a tractable analytic approach possible, and are still somewhat realistic and popular [@kim2021] , so we will use them here.
+
+### Solving Optimization
+
+Now, we will return to the full, stochastic version of the model.
+
+Generally, let
+
+$u(c) = \frac{c^{1-\eta}-1}{1-\eta}$
+
+$v(b) = \frac{b^{1-\sigma}-1}{1-\sigma}$
+
+The first-order condition from bequest optimization is
+
+```{=tex}
+\begin{align*}
+\delta c_{t+1}^{-\eta} &= \zeta b_{t+1}^{-\sigma}\\
+b_{t+1} &= (\frac{\delta}{\zeta}c_{t+1}^{-\eta})^\frac{-1}{\sigma}\\
+b_{t+1} &= (\frac{\delta}{\zeta})^\frac{1}{\sigma}c_{t+1}^\frac{\eta}{\sigma}
+\end{align*}
+```
+
+We will substitute the first-order bequest condition into the old-age constraint:
+
+```{=tex}
+\begin{align*}
+c_{t+1} &= R(w-c_t+b_t) - b_{t+1}^{(i)}\\
+c_{t+1} &= R(w-c_t+b_t^{(i)}) - (\frac{\delta}{\zeta})^\frac{1}{\sigma}c_{t+1}^\frac{\eta}{\sigma}
+\end{align*}
+```
+This is the equation we must solve in order to solve the inner maximization problem. In the general case, where $\eta \neq \sigma$, this is not an equation that can be solved analytically. It must be solved numerically because it involves mixed powers.
+
+Moving forward, I will be under the assumption that $\frac{\eta}{\sigma} = 1$ in order to circumvent this and solve analytically for illustrative purposes.
+
+With $\eta = \sigma$, We can isolate $c_{t+1}$ to find
+
+```{=tex}
+\begin{align*}
+c_{t+1}+ (\frac{\delta}{\zeta})^\frac{1}{\sigma}c_{t+1}&= R(w-c_t+b_t^{(i)})\\
+c_{t+1}[1+ (\frac{\delta}{\zeta})^\frac{1}{\sigma})] &= R(w-c_t+b_t^{(i)})\\
+c_{t+1} &= \frac{R(w-c_t+b_t^{(i)})}{1+ (\frac{\delta}{\zeta})^\frac{1}{\sigma}}
+\end{align*}
+```
+Now that we have $c_{t+1}$ in terms of known variables (at the old-age), we will plug this back into the first-order bequest condition to find $b_{t+1}$.
+
+```{=tex}
+\begin{align*}
+b_{t+1} &= (\frac{\delta}{\zeta})^\frac{1}{\sigma}c_{t+1}^\frac{\eta}{\sigma}\\
+b_{t+1} &= (\frac{\delta}{\zeta})^\frac{1}{\sigma}\frac{R(w-c_t+b_t^{(i)})}{1+ (\frac{\delta}{\zeta})^\frac{1}{\sigma}}
+\end{align*}
+```
+Let $k$ represent the constant $(\frac{\delta}{\zeta})^\frac{1}{\sigma}$.
+
+We have two equations for each possible value of $b_t^{(i)}$:
+
+$$ c_{t+1}^{(i)} = \frac{R(w-c_t+b_t^{(i)})}{1+ k}$$ $$b_{t+1}^{(i)} = k\frac{R(w-c_t+b_t^{(i)})}{1+ k}$$
+
+These equations give explicit values for $c_{t+1}^{(i)}$ and $b_{t+1}^{(i)}$. We can return to our larger lifetime utility function and plug these values in:
+
+$$ U(c_t) = u(c_t) + \sum_i p_i [ \delta u(c_{t+1}^{(i)}) +\zeta v(b_{t+1}^{(i)})]$$
+
+With the CRRA utility functions $u(x),v(x) = \frac{x^{1-\sigma}}{1-\sigma}$:
+
+$$
+U(c_t) = u(c_t) + \sum_i p_i[ \delta \frac{(c_{t+1}^{(i)})^{1-\sigma}}{1-\sigma} +\zeta \frac{(b_{t+1}^{(i)})^{1-\sigma}}{1-\sigma}]
+$$
+
+With explicit forms for $c_{t+1}^{(i)}$ and $b_{t+1}^{(i)}$, the sum $\sum_i p_i [ \delta \frac{(c_{t+1}^{(i)})^{1-\sigma}}{1-\sigma} +\zeta \frac{(b_{t+1}^{(i)})^{1-\sigma}}{1-\sigma}]$ is a function of $c_t$. Therefore, the outer optimization problem only has a single variable, $c_t$.
+
+To finish outer maximization, we want to solve
+
+$$
+\max_{c_t} \left\{ \frac{c_t^{1-\sigma}}{1-\sigma} + \sum_i p_i \left[ \delta  \frac{(c_{t+1}^{(i)})^{1-\sigma}}{1-\sigma} + \zeta  \frac{(b_{t+1}^{(i)})^{1-\sigma}}{1-\sigma} \right] \right\}
+$$
+
+Although this does not have a clean, closed-form solution, there exists a unique solution to this equation. We know this because $U(c_t)$ is strictly concave (CRRA functions are concave and the sum of concave functions in concave), differentiable, and well defined [@wakker2008].
+
+Nevertheless, we can move forward by substituting the expressions for $c\_{t+1}\^{(i)}$ and $b_{t+1}^{(i)}$:
+
+$$
+c_{t+1}^{(i)} = \frac{R(w - c_t + b_t^{(i)})}{1 + k}, \quad 
+b_{t+1}^{(i)} = \frac{kR(w - c_t + b_t^{(i)})}{1 + k}
+$$
+
+where
+
+$$
+k = \left( \frac{\delta}{\zeta} \right)^{1/\sigma}
+$$
+
+into the utility function:
+
+$$
+U(c_t) = \frac{c_t^{1-\sigma}}{1-\sigma} + \sum_i p_i \left[
+\delta \frac{ \left( \frac{R(w - c_t + b_t^{(i)})}{1 + k} \right)^{1-\sigma} }{1-\sigma}
++ \zeta \frac{ \left( \frac{kR(w - c_t + b_t^{(i)})}{1 + k} \right)^{1-\sigma} }{1-\sigma}
+\right]
+$$
+
+Now, we can factor out and group like terms from $c_{t+1}$ and $b_{t+1}$:
+
+```{=tex}
+\begin{align*}
+U(c_t) &= \frac{c_t^{1-\sigma}}{1-\sigma}
++ \sum_i p_i  \frac{R^{1-\sigma}(w - c_t + b_t^{(i)})^{1-\sigma}}{1-\sigma} \left[
+\delta \frac{1}{(1 + k)^{1-\sigma}} + \zeta  \frac{k^{1-\sigma}}{(1 + k)^{1-\sigma}}
+\right]\\
+&= \frac{c_t^{1-\sigma}}{1-\sigma}
++ \sum_i p_i  \frac{R^{1-\sigma}(w - c_t + b_t^{(i)})^{1-\sigma}}{1-\sigma}  \frac{ \delta + \zeta k^{1-\sigma} }{(1 + k)^{1-\sigma}}
+\end{align*}
+```
+We'll define the constant A,
+
+$$
+A = \frac{R^{1-\sigma} (\delta + \zeta k^{1-\sigma})}{(1 + k)^{1-\sigma}}
+$$
+
+then substitute it into the utility function:
+
+$$
+U(c_t) = \frac{c_t^{1-\sigma}}{1-\sigma}
++ \sum_i p_i  \frac{A (w - c_t + b_t^{(i)})^{1-\sigma}}{1-\sigma}
+$$
+
+We now take the derivative with respect to $c_t$ and set it equal to zero:
+
+$$
+\frac{dU}{dc_t} = c_t^{-\sigma}
+- \sum_i p_i  A  (w - c_t + b_t^{(i)})^{-\sigma} = 0
+$$
+
+So the first-order condition is:
+
+$$
+c_t^{-\sigma} = \sum_i p_i A (w - c_t + b_t^{(i)})^{-\sigma}
+$$
+
+This characterizes the solution for optimizing $c_t$. It cannot be solved for algebraically due to mixed powers, but it can be solved for numerically.
+
+### Values of $\eta$ and $\sigma$
+
+Even though a solution is relatively tractable with $\eta = \sigma$, this is not a realistic assumption. This assumption implies that agents treat their own consumption and bequests with the same curvature of utility or risk aversion. Effectually, agents will allocate a fixed proportion of wealth to a bequest for the next generation, regardless of the actual level of wealth.
+
+As a short proof, recall the first-order condition for bequests:
+
+$$
+\delta u'(c_{t+1}) = \zeta v'(b_{t+1})
+$$
+
+With our new utility functions,
+
+```{=tex}
+\begin{align*}
+\delta c_{t+1}^{-\eta} &= \zeta b_{t+1}^{-\sigma}\\
+(\frac{b_{t+1}}{c_{t+1}})^\sigma &= \frac{\zeta}{\delta}c_{t+1}^{\eta-\sigma}\\
+\frac{b_{t+1}}{c_{t+1}} &= (\frac{\zeta}{\delta})^{\frac{1}{\sigma}}c_{t+1}^{\frac{\eta-\sigma}{\sigma}}
+\end{align*}
+```
+When $\eta = \sigma$, $c_{t+1}^{\frac{\eta-\sigma}{\sigma}} = 1$, so the ratio of bequests to consumption in the second period is a constant $(\frac{\zeta}{\delta})^{\frac{1}{\sigma}}$. Realistically, we would expect that wealthier agents allocate a larger proportion of their wealth to bequests. This is possible with $\eta > \sigma$.
+
+Since $\eta > \sigma$, $\frac{\eta-\sigma}{\sigma} > 0$. This means that as consumption $c_{t+1}$ rises, the proportion of wealth left to bequests also rises.
+
+Parameters $\eta > \sigma$ imply that people have a higher risk aversion in consumption than in bequests. The marginal utility of consumption, $u'(c) = c^{-\eta}$ will diminish faster than the marginal utility of bequesting $v'(b) = b^{-\sigma}$. As a result, wealthier agents, whose marginal utility of consumption is very low, will optimally choose to allocate a greater share of their resources to bequests than poorer agents. That is, the bequest-to-consumption ratio increases with wealth, and bequests are luxury goods in this setting.
+
+## Orphan Agents
+
+In the case of early parental death, an agent not only faces no ambiguity in their inheritance amount in the young period, they also receive their inheritance during the young period. If a parent's death age is before or equal to 20, the bequest is 0. If the death age is between 20 and 60, inheritance is
+
+$$
+b_{t+1} = s\frac{a - 20}{40}
+$$
+
+as we again assume linear consumption.
+
+Therefore, an orphaned agent's young-age constraint is:
+
+$$
+c_t + s = w + Rb_t
+$$
+
+where $b_t$ is the unconsumed wages of their parents, in addition to the inheritance that parent would have received from their own parents.
+
+Their old-age constraint is:
+
+$$
+c_{t+1} = Rs - b_{t+1}
+$$
+
+Substituting their young-age constraint into the old-age constraint yields $c_{t+1}$ in terms of $c_t$ and $b_{t+1}$.
+
+An orphan agent's maximization problem is not nested, and takes the form:
+
+$$
+\max_{c_t, b_{t+1}}[u(c_t)+\delta u(c_{t+1}) + \zeta v(b_{t+1})]
+$$
+
+Substituting the old-age constraint into the maximization equation yields:
+
+$$
+\max[u(c_t)+\delta u(R(w+Rb_t-c_t) - b_{t+1}) + \zeta v(b_{t+1})]
+$$
+
+To solve this, we take the partial derivatives of lifetime utility with respect to $c_{t}$ and $b_{t+1}$, and set those derivatives equal to 0.
+
+The first-order condition for consumption is:
+
+```{=tex}
+\begin{align*}
+\frac{\partial U}{\partial c_t} &= u'(c_t) + \delta \frac{d}{dc_t} u(R(w+Rb_t-c_t) - b_{t+1}) + \zeta v'(b_{t+1})\\
+0&=u'(c_t) - \delta R u'(R(w + Rb_t - c_t) - b_{t+1}) + 0\\
+u'(c_t) &= \delta R u'(c_{t+1})
+\end{align*}
+```
+This is the Euler equation relating consumption in periods 1 and 2.
+
+The first-order condition for $b_{t+1}$ is:
+
+```{=tex}
+\begin{align*}
+\frac{\partial U}{\partial b_{t+1}} &= u'(c_t) +\delta \frac{d}{dc_t} u(R(w+Rb_t-c_t) - b_{t+1}) + \zeta v'(b_{t+1})\\
+0 &= -\delta u'(R(w + Rb_t - c_t) - b_{t+1} ) + \zeta v'(b_{t+1})\\
+\zeta v'(b_{t+1}) &= \delta u'(R(w + Rb_t - c_t) - b_{t+1} )\\
+\zeta v'(b_{t+1}) &= \delta u'(c_{t+1})
+\end{align*}
+```
+These first-order conditions resemble those for non-orphaned agents, but differ structurally. They involve no expected values, and the constraints that generate them include $b_t$ in the young-period constraint. This is why $b_t$ is multiplied by an additional power of $R$: it accumulates interest for an extra period.
+
+Together, the first-order conditions yield a system of two equations in two unknowns, $c_t$ and $b_{t+1}$. We solve this system as follows.
+
+Starting from:
+
+```{=tex}
+\begin{align*}
+\zeta v'(b_{t+1}) &= \delta u'(c_{t+1})\\
+u'(c_{t+1}) &= \frac{\zeta}{\delta}v'(b_{t+1})
+\end{align*}
+```
+Substitute into the Euler equation:
+
+```{=tex}
+\begin{align*}
+u'(c_t) &= \delta R u'(c_{t+1})\\
+u'(c_t) &= \delta R \frac{\zeta}{\delta}v'(b_{t+1})\\
+u'(c_t) &= R \zeta v'(b_{t+1})\\
+\frac{u'(c_t)}{R \zeta} &= v'(b_{t+1})
+\end{align*}
+```
+Assuming that $v'$ is invertible, we solve for $b_{t+1}$ in terms of $c_t$:
+
+$$
+b_{t+1} = (v')^{-1} ( \frac{u'(c_t)}{R \zeta})
+$$
+
+This can be plugged back into the old-age budget constraint:
+
+```{=tex}
+\begin{align*}
+c_{t+1} &= R(w + Rb_t - c_t) - b_{t+1} \\
+c_{t+1} &= R(w + Rb_t - c_t) - (v')^{-1} ( \frac{u'(c_t)}{R \zeta})
+\end{align*}
+```
+Now, $c_{t+1}$ is expressed in terms of $c_t$. Substitute into the Euler equation:
+
+```{=tex}
+\begin{align*}
+u'(c_t) &= \delta R u'(c_{t+1})\\
+u'(c_t) &= \delta R u'(R(w + Rb_t - c_t) - (v')^{-1} ( \frac{u'(c_t)}{R \zeta}))
+\end{align*}
+```
+Once $c_t$ is solved for, we can solve for $b_{t+1}$ via:
+
+$$b_{t+1} = (v')^{-1} ( \frac{u'(c_t)}{R \zeta})$$
+
+With CRRA utility functions:
+
+$$
+c_t^{-\eta} = \delta R \left[ R(w + Rb_t- c_t) - \left( \frac{R \zeta}{c_t^{\eta}} \right)^{1/\sigma} \right]^{-\eta}
+$$
+
+As with non-orphaned agents, this equation has no closed-form solution, but it can be solved numerically.
+
+# Simulation Results
+
+```{r}
+run_simulation <- function(seed, zeta = 0.1, beta = 0.662, gamma = 0.038) {
+  set.seed(seed)
+  library(tidyverse)
+  
+  rich_population <- 125
+  poor_population <- 375
+  
+  rich_wage <- 0.4
+  poor_wage <- .2
+  #savings = c(rep(1.5, rich_population), rep(0.5, poor_population))
+  
+  #initial interest rate
+  r <- 0.1
+  depreciation <- 0.07
+  R <- 1 + r - depreciation
+  
+  delta <- 0.3
+  #zeta <- 0.1
+  eta <- 1
+  sigma <- 0.9
+  
+  #constants for optimization later
+  k <- (delta / zeta) ^ (1 / sigma)
+  A <- (R ^ (1 - sigma) * (delta + zeta * k ^ (1 - sigma))) / (1 + k) ^ (1 - sigma)
+  
+  
+  safe_log <- function(x) {
+    ifelse(x > 1e-8, log(x), -1e6)
+  }
+  
+  u <- function(c, eta) {
+    if (eta == 1) return(safe_log(c))
+    return(ifelse(c > 0, (c^(1 - eta) -1)/ (1 - eta), -1e6))
+  }
+  
+  v <- function(b, sigma) {
+    if (sigma == 1) return(safe_log(b))
+    return(ifelse(b > 0, (b^(1 - sigma) -1)/ (1 - sigma), -1e6))
+  }
+  
+  
+  #### Random Class Determination
+  #prob_poor_to_rich <- 0.05
+  #prob_rich_to_poor <- 0.1
+  prob_poor_to_rich <- 0.03333333
+  prob_rich_to_poor <- 0.1
+  
+  update_class <- function(type) {
+    new_type <- ifelse(
+      type == "poor",
+      ifelse(runif(length(type)) < prob_poor_to_rich, "rich", "poor"),
+      ifelse(runif(length(type)) < prob_rich_to_poor, "poor", "rich")
+    )
+    return(new_type)
+  }
+  
+  ### Compute Capital
+  
+  #doesn't take into consideration inheritance to dead agents, capital to low???
+  compute_capital <- function(old, young) {
+    #total_capital <- sum(old$wealth)
+    
+    surviving_old_wealth <- sum(old$wealth[old$death_age >= 60])
+    orphan_wealth <- sum(young$available_bequest_young[young$orphan == 1])
+    
+    total_capital <- surviving_old_wealth + orphan_wealth
+    
+    return(total_capital)
+  }
+  
+  ### Wage Rates
+  
+  #for rich wage= 20x poor wage
+  alpha <- 0.3
+  #beta <- 0.622
+  #gamma <- 0.078
+  
+  #for rich wage  10 times poor wage
+  #alpha <- 0.3
+  #beta <- 0.525
+  #gamma <- 0.175
+  
+  
+  update_wages <- function(young, old) {
+    total_capital <- compute_capital(old, young)
+    
+    rich_labor <- sum(young$type == "rich")
+    poor_labor <- sum(young$type == "poor")
+    
+    new_rich_wage <- beta * total_capital ^ alpha * rich_labor ^ (beta - 1) * poor_labor ^
+      gamma
+    new_poor_wage <- gamma * total_capital ^ alpha * rich_labor ^ beta * poor_labor ^
+      (gamma - 1)
+    
+    young$wages[young$type == "rich"] <- new_rich_wage
+    young$wages[young$type == "poor"] <- new_poor_wage
+    
+    return(young)
+  }
+  
+  ## Interest Rate #########
+  
+  update_interest <- function(young, old) {
+    total_capital <- compute_capital(old, young)
+    rich_labor <- sum(young$type == "rich")
+    poor_labor <- sum(young$type == "poor")
+    
+    new_mpk <- alpha * total_capital ^ (alpha - 1) * rich_labor ^ (beta) * poor_labor ^
+      gamma
+    
+    return(new_mpk)
+  }
+  
+  
+  ### Random Death Function
+  
+  Social_Security_Deaths_2021 <- read_csv("~/Thesis/Social Security Deaths 2021.csv")
+  
+  
+  cdf_data <- Social_Security_Deaths_2021 |>
+    mutate(cdf = `total deaths` / 205000)
+  
+  
+  #inverse transform sampling
+  inverse_transform_sampling <- function(cdf_data, n_samples) {
+    uniform_randoms <- runif(n_samples)
+    sampled_values <- sapply(uniform_randoms, function(u) {
+      age_sampled <- cdf_data$age[min(which(cdf_data$cdf >= u))]
+      return(age_sampled)
+    })
+    
+    return(sampled_values)
+  }
+  
+  
+  death_age <- inverse_transform_sampling(cdf_data, rich_population + poor_population)
+  
+  
+  ##### Inner Optimization Problem (bequests in old age)
+  
+  optimize_bequest <- function(wealth) {
+    inner_utility <- function(b_tp1) {
+      c_tp1 <- wealth - b_tp1
+      return(delta * u(c_tp1, eta) + zeta * v(b_tp1, sigma))
+    }
+    
+    result <- optimize(inner_utility,
+                       interval = c(0.001, wealth - 0.001),
+                       maximum = TRUE)
+    
+    return(list(b_tp1 = result$maximum, c_tp1 = wealth - result$maximum))
+  }
+  
+  
+  ##################Optimization#######################
+  
+  #utility functions
+  #u <- function(c, eta) {
+   # if (eta == 1)
+  #    return(log(c))
+  #  return(c ^ (1 - eta) / (1 - eta))
+  #}
+  
+  #v <- function(b, sigma) {
+  #  if (sigma == 1)
+  #    return(log(b))
+   # return(b ^ (1 - sigma) / (1 - sigma))
+  #}
+  
+  
+  cdf_data <- Social_Security_Deaths_2021 |>
+    mutate(cdf = `total deaths` / 205000)
+  
+  true_prob_deaths <- Social_Security_Deaths_2021 |>
+    mutate(deaths_at_age = `total deaths` - lag(`total deaths`, default = first(`total deaths`))) |>
+    mutate(prob_of_death = deaths_at_age / 205000)
+  
+  p_after_60 <- true_prob_deaths |>
+    filter(age >= 60, age <= 100) |>
+    mutate(p_i = prob_of_death / sum(prob_of_death))
+  p_i = p_after_60$p_i
+  
+  
+  generate_realized_bequests <- function(death_age, planned_c_t, planned_b_t) {
+    b_realized <- planned_b_t + planned_c_t * (100 - death_age) / 40
+    return(b_realized)
+  }
+  
+  
+  #optimize c_t
+  
+  optimize_c_t <- function(w, expected_bequest_path) {
+    lifetime_utility <- function(c_t) {
+      future_resources <- w - c_t + expected_bequest_path
+      
+      utility_today <- u(c_t, sigma)
+      utility_future <- sum(p_i * A * future_resources ^ (1 - sigma), na.rm = TRUE) / (1 - sigma)
+      
+      
+      return(utility_today + utility_future)
+    }
+    
+    opt <- optimize(lifetime_utility,
+                    interval = c(0.001, w - 0.001),
+                    maximum = TRUE)
+    
+    return(opt$maximum)
+  }
+  
+  
+  
+  
+  optimize_orphan_consumption <- function(w, b_t) {
+    # Define lifetime utility function in terms of c_t only
+    lifetime_utility <- function(c_t) {
+      if (c_t <= 0 || c_t >= w + R * b_t)
+        return(-Inf)
+      
+      u_prime <- c_t ^ (-eta)
+      
+      if (zeta == 0) {
+        b_tp1 <- 0
+      } else {
+        b_tp1 <- (u_prime / (R * zeta))^(-1 / sigma)
+      }
+      
+      c_tp1 <- R * (w + R * b_t - c_t) - b_tp1
+      
+      if (c_tp1 <= 0) return(-Inf)  # Optional sanity check
+      
+      U <- u(c_t, eta) + delta * u(c_tp1, eta) + zeta * v(b_tp1, sigma)
+      return(U)
+    }
+    
+    result <- optimize(lifetime_utility, interval = c(0.001, w + R * b_t - 0.001), maximum = TRUE)
+    return(result$maximum)
+  }
+  
+  
+  
+  ############Update Savings#######################
+  update_savings <- function(young, previous_old) {
+    non_orphans <- young |>
+      filter(orphan == 0) |>
+      rowwise() |>
+      mutate(
+        parent_b_tp1 = previous_old$bequest_amount[id],
+        parent_c_tp1 = previous_old$planned_c_tp1[id],
+        
+        
+        b_t_realized_path = list(
+          generate_realized_bequests(60:100, parent_c_tp1, parent_b_tp1)
+        ),
+        
+        
+        optimal_ct = optimize_c_t(wages, expected_bequest_path = b_t_realized_path[[1]]),
+        
+        
+        savings = wages - optimal_ct
+      ) |>
+      ungroup() |>
+      select(-parent_b_tp1, -parent_c_tp1, -b_t_realized_path)
+    
+    
+    
+    orphans <- young |>
+      filter(orphan != 0) |>
+      rowwise() |>
+      mutate(
+        optimal_ct = optimize_orphan_consumption(wages, available_bequest_young),
+        
+        
+        savings = wages + R * available_bequest_young - optimal_ct
+      ) |>
+      ungroup()
+    
+    
+    young <- bind_rows(non_orphans, orphans) |> arrange(id)
+    return(young)
+  }
+  #young_consumption <- young$optimal_ct
+  
+  
+  ### Gini Coefficient
+  
+  gini_coefficient <- function(x) {
+    x <- x[!is.na(x)]  # Remove NAs
+    n <- length(x)
+    if (n == 0)
+      return(NA)
+    x_sorted <- sort(x)
+    index <- seq_along(x_sorted)
+    G <- (2 * sum(index * x_sorted) - (n + 1) * sum(x_sorted)) / (n * sum(x_sorted))
+    return(G)
+  }
+  
+  
+  # Initialize the "young" dataframe
+  young <- data.frame(
+    id = 1:(rich_population + poor_population),
+    type = c(rep("rich", rich_population), rep("poor", poor_population)),
+    wages = c(
+      rep(rich_wage, rich_population),
+      rep(poor_wage, poor_population)
+    ),
+    savings_rate = c(rep(0.8, rich_population), rep(0.1, poor_population)),
+    savings = c(
+      rep(rich_wage * 0.5, rich_population),
+      rep(poor_wage * 0.1, poor_population)
+    ),
+    death_age = inverse_transform_sampling(cdf_data, rich_population + poor_population),
+    bequest_recieved = c(rep(0, rich_population + poor_population)),
+    orphan = rep(0, rich_population + poor_population),
+    available_bequest_young = 0,
+    optimal_ct = 0
+    
+  )
+  
+  
+  # Initialize the "old" dataframe
+  old <- data.frame(
+    id = integer(),
+    type = character(),
+    wages = numeric(),
+    bequest_recieved = numeric(),
+    savings = numeric(),
+    #bequest_rate = numeric(),
+    bequest_amount = numeric(),
+    death_age = numeric(),
+    wealth = numeric(),
+    optimal_ct = numeric()
+  )
+  
+  # Dataframe to track wealth over time
+  wealth_history <- data.frame(
+        rich_wealth = numeric(),
+        poor_wealth = numeric(),
+        rich_savings = numeric(),
+        poor_savings = numeric(),
+        rich_bequest = numeric(),
+        poor_bequest = numeric(),
+        rich_savings_rate = numeric(),
+        r = numeric()
+  )
+  
+  inequality_metrics <- data.frame(time = numeric(), gini = numeric(), gini_consumption = numeric())
+  
+  ####################### Main Simulation Loop ########################################
+  time_periods <- 200
+  for (t in 1:(time_periods - 1)) {
+    if (t == 1) {
+      previous_old <- young
+      #  previous_old$wealth <- c(rep(1.0, rich_population), rep(0.5, poor_population))
+      #  previous_old$bequest_amount <- c(rep(0.3, rich_population), rep(0.07, poor_population))
+      #old$actual_bequest_from_parent <- c(rep(1, rich_population), rep(0.1, poor_population))
+    }
+    
+    old <- young
+    
+    
+    old$actual_bequest_from_parent <- 0
+    
+    non_orphan_indices <- which(old$orphan == 0)
+    
+    
+    if (!"realized_bequest" %in% names(previous_old)) {
+      previous_old$realized_bequest <- rep(0, nrow(previous_old))
+    }
+    
+    
+    old$actual_bequest_from_parent[non_orphan_indices] <- previous_old$realized_bequest[old$id[non_orphan_indices]]
+    
+    
+    
+    
+    old$wealth <- (old$savings + old$actual_bequest_from_parent) * (R)
+    
+    if (t == 1) {
+      old$wealth <- c(rep(0.2, rich_population), rep(0.05, poor_population))
+    }
+    
+    
+    old <- old |>
+      rowwise() |>
+      mutate(
+        opt = if (death_age < 60) {
+          list(list(b_tp1 = 0, c_tp1 = wages - savings))  # died young
+        } else {
+          list(optimize_bequest(wealth = wealth))
+        },
+        bequest_amount = opt$b_tp1,
+        planned_c_tp1 = opt$c_tp1
+      ) |>
+      ungroup() |>
+      select(-opt)
+    
+    
+    old <- old |>
+      mutate(realized_bequest = ifelse(
+        death_age >= 60,
+        bequest_amount + planned_c_tp1 * (100 - death_age) / 40,
+        0
+      ))
+    
+    old$total_cons <- (old$optimal_ct+old$wealth-old$realized_bequest)
+    
+    gini <- gini_coefficient(old$wealth)
+    gini_consumption <- gini_coefficient(old$total_cons)
+    gini_orphan <- gini_coefficient(old$wealth[old$orphan == 1])
+    gini_nonorphan <- gini_coefficient(old$wealth[old$orphan == 0])
+    
+    inequality_metrics <- rbind(inequality_metrics, data.frame(time = t, gini = gini, gini_consumption=gini_consumption, gini_orphan = gini_orphan, gini_nonorphan = gini_nonorphan))
+    
+    rich_wealth <- sum(old$wealth[old$type == "rich"], na.rm = TRUE) / rich_population
+    poor_wealth <- sum(old$wealth[old$type == "poor"], na.rm = TRUE) / poor_population
+    rich_savings <- mean(old$savings[old$type == "rich"], na.rm = TRUE)
+    poor_savings <- mean(old$savings[old$type == "poor"], na.rm = TRUE)
+    rich_bequest <- mean((old$actual_bequest_from_parent+old$available_bequest_young)[old$type == "rich"], na.rm = TRUE)
+    poor_bequest <- mean((old$actual_bequest_from_parent+old$available_bequest_young)[old$type == "poor"], na.rm = TRUE)
+    #rich_wage <- mean(old$wages[old$type == "poor"])
+    #poor_wage <- mean(old$wages[old$type == "poor"])
+    rich_savings_rate <- rich_savings/mean(old$wages[old$type == "rich"])
+    poor_savings_rate <- poor_savings/mean(old$wages[old$type == "poor"]) 
+    
+    wealth_history <- rbind(
+      wealth_history,
+      data.frame(
+        rich_wealth = rich_wealth,
+        poor_wealth = poor_wealth,
+        rich_savings = rich_savings,
+        poor_savings = poor_savings,
+        rich_bequest = rich_bequest,
+        poor_bequest = poor_bequest,
+        rich_savings_rate =  rich_savings_rate,
+        poor_savings_rate =  poor_savings_rate,
+        rich_wage <- mean(old$wages[old$type == "rich"]),
+        poor_wage <- mean(old$wages[old$type == "poor"]),
+        r = R
+      )
+    )
+    
+    
+    young <- data.frame(
+      id = 1:(rich_population + poor_population),
+      type = update_class(old$type),
+      wages = NA,
+      savings = 0,
+      death_age = inverse_transform_sampling(cdf_data, rich_population + poor_population),
+      orphan = case_when(
+        old$death_age >= 60 ~ 0,
+        old$death_age >= 20 & old$death_age < 60 ~ 1,
+        old$death_age < 20 ~ 2
+      )
+    )
+    
+    #young$available_bequest_young <- case_when(
+    #  young$orphan == 1 ~ pmax(0, old$wealth - (old$wages - old$savings) * (old$death_age - 20) / 40),
+    #  TRUE ~ 0
+    #)
+    
+    parent_wealth_residual <- pmax(0,
+                                   old$wealth - (old$optimal_ct) * (old$death_age - 20) / 40)
+    
+    grandparent_bequest <- ifelse(old$death_age < 60, previous_old$realized_bequest[old$id], 0)
+    
+    young$available_bequest_young <- case_when(young$orphan == 1 ~ parent_wealth_residual + grandparent_bequest,
+                                               TRUE ~ 0)
+    
+    
+    young <- update_wages(young, old)
+    
+    young <- update_savings(young = young, previous_old = old)
+    
+    #print(R)
+    #print(compute_capital(old,young))
+    R <- 1 + update_interest(young, old) - depreciation
+    #print(R)
+    
+    total_savings <- sum(young$savings)
+    total_bequests <- sum(old$bequest_amount)
+    #print(sprintf("t=%d | Savings: %.2f | Bequests: %.2f | Capital: %.2f | R: %.3f",
+    #              t, total_savings, total_bequests, compute_capital(old, young), R))
+    previous_old <- old
+    
+    #avg_rich_wage <- mean(young$wages[young$type == "rich"], na.rm = TRUE)
+    #avg_poor_wage <- mean(young$wages[young$type == "poor"], na.rm = TRUE)
+    
+    
+  }
+   
+  
+  
+  # ---- Metrics from the last 100 time steps ----
+  
+  last_100_inequality <- inequality_metrics |> tail(100)
+  last_100_wealth <- wealth_history |> tail(100)
+  
+  # Average Gini coefficient
+  avg_gini <- mean(last_100_inequality$gini, na.rm = TRUE)
+  avg_gini_consumption <- mean(last_100_inequality$gini_consumption, na.rm = TRUE)
+  avg_gini_orphan <- mean(last_100_inequality$gini_orphan , na.rm = TRUE)
+  avg_gini_nonorphan <- mean(last_100_inequality$gini_nonorphan, na.rm = TRUE)
+  # Average R (interest rate net of depreciation)
+  avg_r <- mean(last_100_wealth$r, na.rm = TRUE)
+  
+  avg_rich_wage <- mean(last_100_wealth$rich_wage)
+  avg_poor_wage <- mean(last_100_wealth$poor_wage)
+
+  
+  # Combine all old wealth from final 100 periods
+  final_wealth <- old$wealth
+  final_b_amt <- old$bequest_amount
+  mean_wealth <- mean(final_wealth, na.rm = TRUE)
+  mean_consumption <- mean(old$total_cons)
+  median_wealth <- median(final_wealth, na.rm = TRUE)
+  poverty_threshold <- 0.5 * median_wealth
+  poverty_rate <- mean(final_wealth < poverty_threshold, na.rm = TRUE)
+  
+  
+  summary_stats <- tibble(
+    average_gini = avg_gini,
+    average_gini_consumption = avg_gini_consumption,
+    average_gini_orphan = avg_gini_orphan,
+    average_gini_nonorphan = avg_gini_nonorphan,
+    average_R = avg_r,
+    avg_rich_wage = avg_rich_wage,
+    avg_poor_wage = avg_poor_wage,
+    mean_wealth = mean_wealth,
+    mean_consumption = mean_consumption,
+    median_wealth = median_wealth,
+    poverty_rate = poverty_rate,
+    avg_rich_savings_rate = mean(last_100_wealth$rich_savings_rate),
+    avg_poor_savings_rate = mean(last_100_wealth$poor_savings_rate),
+    avg_rich_bequest = mean(last_100_wealth$rich_bequest),
+    avg_poor_bequest = mean(last_100_wealth$poor_bequest),
+    avg_rich_wealth = mean(last_100_wealth$rich_wealth),
+    avg_poor_wealth = mean(last_100_wealth$poor_wealth),
+    avg_rich_savings = mean(last_100_wealth$rich_savings),
+    avg_poor_savings = mean(last_100_wealth$poor_savings)
+  )
+  
+  return(summary_stats)
+}  
+```
+
+```{r}
+run_simulation_gen <- function(seed = 123, zeta = 0.1, beta = 0.662, gamma = 0.038) {
+  set.seed(seed)
+  library(tidyverse)
+  
+  rich_population <- 500
+  poor_population <- 1500
+  
+  rich_wage <- 0.4
+  poor_wage <- .2
+  #savings = c(rep(1.5, rich_population), rep(0.5, poor_population))
+  
+  #initial interest rate
+  r <- 0.1
+  depreciation <- 0.07
+  R <- 1 + r - depreciation
+  
+  delta <- 0.3
+  #zeta <- 0
+  eta <- 1
+  sigma <- 0.9
+  
+  #constants for optimization later
+  k <- (delta / zeta) ^ (1 / sigma)
+  A <- (R ^ (1 - sigma) * (delta + zeta * k ^ (1 - sigma))) / (1 + k) ^ (1 - sigma)
+  
+  
+  safe_log <- function(x) {
+    ifelse(x > 1e-8, log(x), -1e6)
+  }
+  
+  u <- function(c, eta) {
+    if (eta == 1) return(safe_log(c))
+    return(ifelse(c > 0, (c^(1 - eta)-1) / (1 - eta), -1e6))
+  }
+  
+  v <- function(b, sigma) {
+    if (sigma == 1) return(safe_log(b))
+    return(ifelse(b > 0, (b^(1 - sigma)-1) / (1 - sigma), -1e6))
+  }
+  
+  
+  #### Random Class Determination
+  #prob_poor_to_rich <- 0.05
+  #prob_rich_to_poor <- 0.1
+  prob_poor_to_rich <- 0.0333333
+  prob_rich_to_poor <- 0.1
+  
+  update_class <- function(type) {
+    new_type <- ifelse(
+      type == "poor",
+      ifelse(runif(length(type)) < prob_poor_to_rich, "rich", "poor"),
+      ifelse(runif(length(type)) < prob_rich_to_poor, "poor", "rich")
+    )
+    return(new_type)
+  }
+  
+  ### Compute Capital
+  
+  #doesn't take into consideration inheritance to dead agents, capital to low???
+  compute_capital <- function(old, young) {
+    #total_capital <- sum(old$wealth)
+    
+    surviving_old_wealth <- sum(old$wealth[old$death_age >= 60])
+    orphan_wealth <- sum(young$available_bequest_young[young$orphan == 1])
+    
+    total_capital <- surviving_old_wealth + orphan_wealth
+    
+    return(total_capital)
+  }
+  
+  ### Wage Rates
+  
+  #alpha <- 0.3
+ # beta <- 0.622
+  #gamma <- 0.078
+  
+  #for rich wage  10 times poor wage
+  alpha <- 0.3
+  beta <- 0.525
+  gamma <- 0.175
+  
+  
+  update_wages <- function(young, old) {
+    total_capital <- compute_capital(old, young)
+    
+    rich_labor <- sum(young$type == "rich")
+    poor_labor <- sum(young$type == "poor")
+    
+    new_rich_wage <-  beta* total_capital ^ alpha * rich_labor ^ (beta - 1) * poor_labor ^
+      gamma
+    new_poor_wage <- gamma * total_capital ^ alpha * rich_labor ^ beta  * poor_labor ^
+      (gamma - 1)
+    
+    young$wages[young$type == "rich"] <- new_rich_wage
+    young$wages[young$type == "poor"] <- new_poor_wage
+    
+    return(young)
+  }
+  
+  ## Interest Rate #########
+  
+  update_interest <- function(young, old) {
+    total_capital <- compute_capital(old, young)
+    rich_labor <- sum(young$type == "rich")
+    poor_labor <- sum(young$type == "poor")
+    
+    new_mpk <- alpha * total_capital ^ (alpha - 1) * rich_labor ^ (beta) * poor_labor ^
+      gamma
+    
+    return(new_mpk)
+  }
+  
+  
+  ### Random Death Function
+  
+  Social_Security_Deaths_2021 <- read_csv("~/Thesis/Social Security Deaths 2021.csv")
+  
+  
+  cdf_data <- Social_Security_Deaths_2021 |>
+    mutate(cdf = `total deaths` / 205000)
+  
+  
+  #inverse transform sampling
+  inverse_transform_sampling <- function(cdf_data, n_samples) {
+    uniform_randoms <- runif(n_samples)
+    sampled_values <- sapply(uniform_randoms, function(u) {
+      age_sampled <- cdf_data$age[min(which(cdf_data$cdf >= u))]
+      return(age_sampled)
+    })
+    
+    return(sampled_values)
+  }
+  
+  
+  death_age <- inverse_transform_sampling(cdf_data, rich_population + poor_population)
+  
+  
+  ##### Inner Optimization Problem (bequests in old age)
+  
+  optimize_bequest <- function(wealth) {
+    inner_utility <- function(b_tp1) {
+      c_tp1 <- wealth - b_tp1
+      return(delta * u(c_tp1, eta) + zeta * v(b_tp1, sigma))
+    }
+    
+    result <- optimize(inner_utility,
+                       interval = c(0.001, wealth - 0.001),
+                       maximum = TRUE)
+    
+    return(list(b_tp1 = result$maximum, c_tp1 = wealth - result$maximum))
+  }
+  
+  
+  ##################Optimization#######################
+  
+  #utility functions
+  #u <- function(c, eta) {
+  # if (eta == 1)
+  #    return(log(c))
+  #  return(c ^ (1 - eta) / (1 - eta))
+  #}
+  
+  #v <- function(b, sigma) {
+  #  if (sigma == 1)
+  #    return(log(b))
+  # return(b ^ (1 - sigma) / (1 - sigma))
+  #}
+  
+  
+  cdf_data <- Social_Security_Deaths_2021 |>
+    mutate(cdf = `total deaths` / 205000)
+  
+  true_prob_deaths <- Social_Security_Deaths_2021 |>
+    mutate(deaths_at_age = `total deaths` - lag(`total deaths`, default = first(`total deaths`))) |>
+    mutate(prob_of_death = deaths_at_age / 205000)
+  
+  p_after_60 <- true_prob_deaths |>
+    filter(age >= 60, age <= 100) |>
+    mutate(p_i = prob_of_death / sum(prob_of_death))
+  p_i = p_after_60$p_i
+  
+  
+  generate_realized_bequests <- function(death_age, planned_c_t, planned_b_t) {
+    b_realized <- planned_b_t + planned_c_t * (100 - death_age) / 40
+    return(b_realized)
+  }
+  
+  
+  #optimize c_t
+  
+  optimize_c_t <- function(w, expected_bequest_path) {
+    lifetime_utility <- function(c_t) {
+      future_resources <- w - c_t + expected_bequest_path
+      
+      utility_today <- u(c_t, sigma)
+      utility_future <- sum(p_i * A * future_resources ^ (1 - sigma), na.rm = TRUE) / (1 - sigma)
+      
+      
+      return(utility_today + utility_future)
+    }
+    
+    opt <- optimize(lifetime_utility,
+                    interval = c(0.001, w - 0.001),
+                    maximum = TRUE)
+    
+    return(opt$maximum)
+  }
+  
+  
+  
+  
+  optimize_orphan_consumption <- function(w, b_t) {
+    # Define lifetime utility function in terms of c_t only
+    lifetime_utility <- function(c_t) {
+      if (c_t <= 0 || c_t >= w + R * b_t)
+        return(-Inf)
+      
+      u_prime <- c_t ^ (-eta)
+      
+      if (zeta == 0) {
+        b_tp1 <- 0
+      } else {
+        b_tp1 <- (u_prime / (R * zeta))^(-1 / sigma)
+      }
+      
+      c_tp1 <- R * (w + R * b_t - c_t) - b_tp1
+      
+      if (c_tp1 <= 0) return(-Inf)  # Optional sanity check
+      
+      U <- u(c_t, eta) + delta * u(c_tp1, eta) + zeta * v(b_tp1, sigma)
+      return(U)
+    }
+    
+    result <- optimize(lifetime_utility, interval = c(0.001, w + R * b_t - 0.001), maximum = TRUE)
+    return(result$maximum)
+  }
+  
+  
+  
+  ############Update Savings#######################
+  update_savings <- function(young, previous_old) {
+    non_orphans <- young |>
+      filter(orphan == 0) |>
+      rowwise() |>
+      mutate(
+        parent_b_tp1 = previous_old$bequest_amount[id],
+        parent_c_tp1 = previous_old$planned_c_tp1[id],
+        
+        
+        b_t_realized_path = list(
+          generate_realized_bequests(60:100, parent_c_tp1, parent_b_tp1)
+        ),
+        
+        
+        optimal_ct = optimize_c_t(wages, expected_bequest_path = b_t_realized_path[[1]]),
+        
+        
+        savings = wages - optimal_ct
+      ) |>
+      ungroup() |>
+      select(-parent_b_tp1, -parent_c_tp1, -b_t_realized_path)
+    
+    
+    
+    orphans <- young |>
+      filter(orphan != 0) |>
+      rowwise() |>
+      mutate(
+        optimal_ct = optimize_orphan_consumption(wages, available_bequest_young),
+        
+        
+        savings = wages + R * available_bequest_young - optimal_ct
+      ) |>
+      ungroup()
+    
+    
+    young <- bind_rows(non_orphans, orphans) |> arrange(id)
+    return(young)
+  }
+  #young_consumption <- young$optimal_ct
+  
+  
+  ### Gini Coefficient
+  
+  gini_coefficient <- function(x) {
+    x <- x[!is.na(x)]  # Remove NAs
+    n <- length(x)
+    if (n == 0)
+      return(NA)
+    x_sorted <- sort(x)
+    index <- seq_along(x_sorted)
+    G <- (2 * sum(index * x_sorted) - (n + 1) * sum(x_sorted)) / (n * sum(x_sorted))
+    return(G)
+  }
+  
+  
+  # Initialize the "young" dataframe
+  young <- data.frame(
+    id = 1:(rich_population + poor_population),
+    type = c(rep("rich", rich_population), rep("poor", poor_population)),
+    wages = c(
+      rep(rich_wage, rich_population),
+      rep(poor_wage, poor_population)
+    ),
+    savings_rate = c(rep(0.8, rich_population), rep(0.1, poor_population)),
+    savings = c(
+      rep(rich_wage * 0.5, rich_population),
+      rep(poor_wage * 0.1, poor_population)
+    ),
+    death_age = inverse_transform_sampling(cdf_data, rich_population + poor_population),
+    bequest_recieved = c(rep(0, rich_population + poor_population)),
+    orphan = rep(0, rich_population + poor_population),
+    available_bequest_young = 0,
+    optimal_ct = 0
+    
+  )
+  
+  
+  # Initialize the "old" dataframe
+  old <- data.frame(
+    id = integer(),
+    type = character(),
+    wages = numeric(),
+    bequest_recieved = numeric(),
+    savings = numeric(),
+    #bequest_rate = numeric(),
+    bequest_amount = numeric(),
+    death_age = numeric(),
+    wealth = numeric(),
+    optimal_ct = numeric()
+  )
+  
+  # Dataframe to track wealth over time
+  wealth_history <- data.frame(
+    time = integer(),
+    type = character(),
+    total_wealth = numeric(),
+    r = numeric()
+  )
+  
+  inequality_metrics <- data.frame(time = numeric(), gini = numeric(), gini_consumption = numeric())
+  
+  ####################### Main Simulation Loop ########################################
+  time_periods <- 100
+  for (t in 1:(time_periods - 1)) {
+    if (t == 1) {
+      previous_old <- young
+      #  previous_old$wealth <- c(rep(1.0, rich_population), rep(0.5, poor_population))
+      #  previous_old$bequest_amount <- c(rep(0.3, rich_population), rep(0.07, poor_population))
+      #old$actual_bequest_from_parent <- c(rep(1, rich_population), rep(0.1, poor_population))
+    }
+    
+    old <- young
+    
+    
+    old$actual_bequest_from_parent <- 0
+    
+    non_orphan_indices <- which(old$orphan == 0)
+    
+    
+    if (!"realized_bequest" %in% names(previous_old)) {
+      previous_old$realized_bequest <- rep(0, nrow(previous_old))
+    }
+    
+    
+    old$actual_bequest_from_parent[non_orphan_indices] <- previous_old$realized_bequest[old$id[non_orphan_indices]]
+    
+    
+    
+    
+    old$wealth <- (old$savings + old$actual_bequest_from_parent) * R
+    
+    if (t == 1) {
+      old$wealth <- c(rep(0.2, rich_population), rep(0.05, poor_population))
+    }
+    
+    
+    old <- old |>
+      rowwise() |>
+      mutate(
+        opt = if (death_age < 60) {
+          list(list(b_tp1 = 0, c_tp1 = wages - savings))  # died young
+        } else {
+          list(optimize_bequest(wealth = wealth))
+        },
+        bequest_amount = opt$b_tp1,
+        planned_c_tp1 = opt$c_tp1
+      ) |>
+      ungroup() |>
+      select(-opt)
+    
+    
+    old <- old |>
+      mutate(realized_bequest = ifelse(
+        death_age >= 60,
+        bequest_amount + planned_c_tp1 * (100 - death_age) / 40,
+        0
+      ))
+    
+    old$total_cons <- (old$optimal_ct+old$wealth-old$realized_bequest)
+    
+    gini <- gini_coefficient(old$wealth)
+    gini_consumption <- gini_coefficient(old$total_cons)
+    
+    inequality_metrics <- rbind(inequality_metrics, data.frame(time = t, gini = gini, gini_consumption=gini_consumption))
+    
+    rich_wealth <- sum(old$wealth[old$type == "rich"], na.rm = TRUE) / rich_population
+    poor_wealth <- sum(old$wealth[old$type == "poor"], na.rm = TRUE) / poor_population
+    rich_savings <- mean(old$savings[old$type == "rich"], na.rm = TRUE)
+    poor_savings <- mean(old$savings[old$type == "poor"], na.rm = TRUE)
+    rich_bequest <- mean(old$bequest_amount[old$type == "rich"], na.rm = TRUE)
+    poor_bequest <- mean(old$bequest_amount[old$type == "poor"], na.rm = TRUE)
+    
+    wealth_history <- rbind(
+      wealth_history,
+      data.frame(
+        time = c(t, t),
+        type = c("rich", "poor"),
+        total_wealth = c(rich_wealth, poor_wealth),
+        avg_savings = c(rich_savings, poor_savings),
+        avg_bequest = c(rich_bequest, poor_bequest),
+        r = R
+      )
+    )
+    
+    young <- data.frame(
+      id = 1:(rich_population + poor_population),
+      type = update_class(old$type),
+      wages = NA,
+      savings = 0,
+      death_age = inverse_transform_sampling(cdf_data, rich_population + poor_population),
+      orphan = case_when(
+        old$death_age >= 60 ~ 0,
+        old$death_age >= 20 & old$death_age < 60 ~ 1,
+        old$death_age < 20 ~ 2
+      )
+    )
+    
+    #young$available_bequest_young <- case_when(
+    #  young$orphan == 1 ~ pmax(0, old$wealth - (old$wages - old$savings) * (old$death_age - 20) / 40),
+    #  TRUE ~ 0
+    #)
+    
+    #parent_wealth_residual <- pmax(0,
+     #                              old$wealth - (old$wages - old$savings) * (old$death_age - 20) / 40)
+    parent_wealth_residual <- pmax(0,
+                                   old$wealth - (old$optimal_ct) * (old$death_age - 20) / 40)
+    grandparent_bequest <- ifelse(old$death_age < 60, previous_old$realized_bequest[old$id], 0)
+    
+    young$available_bequest_young <- case_when(young$orphan == 1 ~ parent_wealth_residual + grandparent_bequest,
+                                               TRUE ~ 0)
+    
+    
+    young <- update_wages(young, old)
+    
+    young <- update_savings(young = young, previous_old = old)
+    
+    #print(R)
+    #print(compute_capital(old,young))
+    R <- 1 + update_interest(young, old) - depreciation
+    #print(R)
+    
+    total_savings <- sum(young$savings)
+    total_bequests <- sum(old$bequest_amount)
+    #print(sprintf("t=%d | Savings: %.2f | Bequests: %.2f | Capital: %.2f | R: %.3f",
+    #              t, total_savings, total_bequests, compute_capital(old, young), R))
+    previous_old <- old
+    
+    
+  }
+  
+  return(old)
+}  
+
+```
+
+## Effects of Altruism on Inequality
+
+In this section, we examine how introducing altruism affects long-run wealth and consumption inequality in the model. Altruism is captured by increasing the parameter $\zeta$, the coefficient on bequest utility, from 0 to 0.1. To track inequality, we use two metrics: the Gini coefficient, and a proportional measure based on wage type.
+
+The Gini coefficient is a standard way to measure inequality across an entire population, where a value of 0 indicates perfect equality and a value of 1 indicates complete inequality. It's defined as twice the area between the Lorenz curve and the 45-degree line of perfect equality. While the Gini captures distribution-wide changes, it isn't especially good at detecting shifts between discrete groups. Since our model has both continuous outcomes (wealth) and discrete elements (wage types), we supplement the Gini with a proportional measure: either the percent of total wealth owned by rich agents, or the ratio of rich to poor consumption. (For further details, see Appendix C: Capturing Wealth Inequality.)
+
+Interestingly, we find that altruism decreases inequality when measured by the Gini coefficient, but increases the share of total wealth held by rich agents. To analyze this more carefully, we use a Monte Carlo simulation approach. Because outcomes across generations are dependent, we don't treat generations as independent draws. Instead, for each $\zeta$ value, we run 20 full simulations of 200 generations each, and calculate long-run statistics based on the final 100 generations. These results are used to estimate averages, build confidence intervals, and generate the plots shown below. We also run a larger single simulation with 2000 agents per generation, using the 100th generation to examine individual-level wealth distributions.
+
+In the next sections, we start by looking at how altruism affects the Gini coefficient, then turn to changes in the proportion of wealth owned by rich agents. Finally, we break down how the distributional shape shifts within and between groups. This will help us separate effects driven by changes in within-group inequality versus between-group inequality.
+
+### Wealth Gini Decrease
+
+We start by examining how altruism affects the Gini coefficient of wealth. Simulation results show a clear decrease in the Gini when altruism is introduced, suggesting that overall wealth inequality falls. However, a lower Gini alone doesn't tell us whether the change is happening within wage groups, between them, or both. We'll first look at the raw changes, and then further examine the structure underneath.
+
+```{r, include = FALSE}
+library(purrr)
+library(tidyverse)
+library(dplyr)
+library(e1071)
+library(reldist)
+
+set.seed(123)
+
+results0.1_3x <- map_dfr(1:20, ~run_simulation(seed = .x, zeta = 0.1, beta = 0.35, gamma = 0.35))|> mutate(zeta = 0.1)
+
+results0_3x <- map_dfr(1:20, ~run_simulation(seed = .x, zeta = 0, beta = 0.35, gamma = 0.35))|> mutate(zeta = 0)
+
+combined_results_3x <- bind_rows(results0_3x, results0.1_3x)
+combined_results_3x <- combined_results_3x |> mutate (rich_owned = avg_rich_wealth/(4*mean_wealth))
+combined_results_3x
+```
+
+```{r}
+#| label: fig-gini-wealth
+#| fig-cap: "Gini coefficient of wealth under altruism ($\\zeta=0$ vs $\\zeta=0.1$). Altruism significantly decreases Gini."
+#| fig-pos: 'H'
+#| echo: false
+#| message: false
+#| warning: false
+
+combined_results_3x |>
+  mutate(zeta = factor(zeta)) |>
+  ggplot(aes(x = zeta, y = average_gini)) +
+  geom_boxplot() +
+  labs(
+    #title = "Wealth Inequality by Altruism (Low Wage Inequality)",
+    x = "Altruism (zeta)",
+    y = "Wealth Gini Coefficient"
+  ) +
+  theme_minimal()
+```
+
+```{r, include=FALSE}
+ci_summary <- combined_results_3x |>
+  group_by(zeta) |>
+  summarise(
+    mean_gini = mean(average_gini),
+    sd_gini = sd(average_gini),
+    n = n(),
+    se_gini = sd_gini / sqrt(n),
+    t_crit = qt(0.975, df = n - 1),
+    lower_95 = mean_gini - t_crit * se_gini,
+    upper_95 = mean_gini + t_crit * se_gini
+  )
+
+t.test(average_gini ~ zeta, data = combined_results_3x, var.equal = FALSE)
+```
+
+As shown in @fig-gini-wealth, the average Gini coefficient drops from 0.624 to 0.466 when altruism is introduced. Welch's two-sample t-test confirms that this difference is highly statistically significant $(p < 10^{-16})$.
+
+This result tells us that total wealth inequality falls when agents place greater value on bequesting. However, the Gini is a global summary measure — it doesn't tell us where the inequality reduction is happening.
+
+To visualize this shift more directly, we plot the Lorenz curves for the wealth distributions under altruism and no altruism. @fig-lorenz-wealth shows that the Lorenz curve with altruism lies closer to the line of equality than the curve without altruism at every population percentile. This means that, at every cumulative percentile, agents collectively own a larger share of total wealth than they do without altruism. The Lorenz curve visually reinforces what we saw from the Gini: overall inequality falls.
+
+```{r}
+#| label: fig-lorenz-wealth
+#| fig-cap: Lorenz curves for wealth distributions with and without altruism. Under altruism ($\zeta=0.1$), the Lorenz curve lies everywhere closer to the line of equality, indicating reduced overall inequality.
+#| fig-pos: 'H'
+#| echo: false
+#| message: false
+#| warning: false
+
+old_0_3x <- run_simulation_gen(zeta = 0, beta = 0.35, gamma = 0.35)
+old_0.1_3x <- run_simulation_gen(zeta = 0.1, beta = 0.35, gamma = 0.35)
+
+# Function to prepare Lorenz curve data from a vector
+get_lorenz_data <- function(x, label) {
+  x <- sort(x)
+  p <- cumsum(rep(1 / length(x), length(x)))  # cumulative population share
+  L <- cumsum(x) / sum(x)                     # cumulative wealth share
+  tibble(p = c(0, p),
+         L = c(0, L),
+         type = label)
+}
+
+lorenz_0_3x <- get_lorenz_data(old_0_3x$wealth, "Zeta = 0")
+lorenz_0.1_3x <- get_lorenz_data(old_0.1_3x$wealth, "Zeta = 0.1")
+
+lorenz_df <- bind_rows(lorenz_0_3x, lorenz_0.1_3x)
+
+ggplot(lorenz_df, aes(x = p, y = L, color = type)) +
+  geom_line(size = 1.2) +
+  geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "gray40") +
+  labs(
+    x = "Cumulative Share of Population",
+    y = "Cumulative Share of Wealth",
+    color = ""
+  ) +
+  theme_minimal(base_size = 14)
+```
+
+While the Lorenz curve confirms that altruism reduces overall wealth inequality, it does not reveal how this redistribution occurs across different wage groups. Specifically, we want to know whether altruism primarily flattens inequality within wage types, or whether it shifts wealth between rich and poor wage groups.
+
+To begin, we focus on a simple proportional measure: the share of total wealth owned by rich wage-type agents.
+
+### Proportional Wealth Inequality Increases
+
+Interestingly, and perhaps counterintuitively, we find that the rich group's share of total wealth increases with altruism, indicating complex and differing dynamic changes between and inside wage groups.
+
+```{r, include=FALSE}
+#divide by 4 because rich agents are 1/4 of the population
+mean(combined_results_3x$avg_rich_wealth[combined_results_3x$ zeta == 0])/(4*mean(combined_results_3x$mean_wealth[combined_results_3x$ zeta == 0]))
+#percent owned with altruism
+mean(combined_results_3x$avg_rich_wealth[combined_results_3x$ zeta == 0.1])/(4*mean(combined_results_3x$mean_wealth[combined_results_3x$ zeta == 0.1]))
+```
+
+```{r}
+#| label: fig-rich-owned
+#| fig-cap: "Proportion of total wealth owned by rich agents ($\\zeta=0$ vs $\\zeta=0.1$). Altruism increases rich ownership."
+#| fig-pos: 'H'
+#| echo: false
+#| message: false
+#| warning: false
+
+combined_results_3x |>
+  mutate(zeta = factor(zeta)) |>
+  ggplot(aes(x = zeta, y = rich_owned)) +
+  geom_boxplot() +
+  labs(
+    #title = "Fraction of Rich Owned Wealth by Altruism (Low Wage Inequality)",
+    x = "Altruism (zeta)",
+    y = "Fraction of Economy Wealth Owned by Rich"
+  ) +
+  theme_minimal()
+```
+
+```{r, include = FALSE}
+#var.test(combined_results_3x$rich_owned[combined_results_3x$zeta == 0], combined_results_3x$rich_owned[combined_results_3x$zeta == 0.1])
+t.test(rich_owned ~ zeta, data = combined_results_3x, var.equal = FALSE)
+```
+
+As shown in @fig-rich-owned, the fraction of total wealth owned by rich agents rises from 36.0% without altruism to 39.6% with altruism. This increase is statistically significant $(p < 10^{-6})$ according to Welch’s two-sample t-test.
+
+Taken together, these results suggest that while overall wealth inequality falls (as captured by the Gini), inequality between wage groups actually rises. Rich wage-type agents consolidate a larger share of total wealth under altruism, even as wealth becomes more evenly distributed within each group.
+
+To understand how these seemingly opposing trends can occur simultaneously, we next examine the distributional structure within rich and poor groups separately.
+
+### Distributional Analysis
+
+Now, we look at the full distributions of wealth for rich and poor agents separately, within a single generation. In this section, we use histograms, relative density distributions, and moment-based statistics to capture how distributional shape changes under altruism.
+
+#### Histograms by Group
+
+We plot wealth histograms for rich and poor separately, with and without altruism. If altruism only affected between-group inequality, we would expect the shapes of these distributions to stay roughly the same. Instead, we find that both distributions become flatter and less skewed under altruism, suggesting that within-group inequality also declines.
+
+```{r}
+#| label: fig-hist-rich
+#| fig-cap: "Wealth distributions for rich agents under altruism ($\\zeta=0.1$) and no altruism ($\\zeta=0$)."
+#| fig-pos: 'H'
+#| echo: false
+#| message: false
+#| warning: false
+
+library(patchwork)
+# First plot (zeta = 0)
+p_rich0 <- old_0_3x |> filter(type =="rich") |>
+  ggplot( aes(x = wealth)) +
+  geom_histogram(bins = 30, color = "black", alpha = 0.7, fill = "#00BFC4") +
+  geom_vline(aes(xintercept = mean(wealth)), color = "blue", linetype = "dashed", size = 1) +
+  annotate(
+    "text",
+    x = mean(old_0_3x$wealth[old_0_3x$type == "poor"]),
+    y = 90,  # adjust up or down depending on your y-axis
+    label = paste0("Mean = ", round(mean(old_0_3x$wealth[old_0_3x$type == "rich"]), 3)),
+    color = "blue",
+    vjust = -10,
+    hjust = -0.1,
+    size = 4
+  ) +
+  labs(
+    title = "Zeta = 0",
+    x = "Rich Agent Wealth",
+    y = "Density"
+  ) +
+  ylim(0, 300) +
+  xlim(-0.1,2)+
+  theme_minimal()
+
+# Second plot (zeta = 0.1)
+
+p_rich0.1 <- old_0.1_3x |> filter(type =="rich") |> 
+  ggplot(aes(x = wealth)) +
+  geom_histogram( bins = 30, color = "black", alpha = 0.7, fill = "#00BFC4") +
+  geom_vline(aes(xintercept = mean(wealth)), color = "blue", linetype = "dashed", size = 1) +
+  annotate(
+    "text",
+    x = mean(old_0_3x$wealth[old_0_3x$type == "poor"]),
+    y = 90,  # adjust up or down depending on your y-axis
+    label = paste0("Mean = ", round(mean(old_0.1_3x$wealth[old_0_3x$type == "rich"]), 3)),
+    color = "blue",
+    vjust = -10,
+    hjust = -0.5,
+    size = 4
+  ) +
+  labs(
+    title = "Zeta = 0.1",
+    x = "Poor Agent Wealth",
+    y = "Density"
+  ) +
+  ylim(0, 300) +
+  theme_minimal()
+
+# Put them side by side
+p_rich0 + p_rich0.1+ 
+  plot_annotation(
+    theme = theme(plot.title = element_text(hjust = 0.5, size = 16, face = "bold"))
+  )
+
+```
+
+```{r}
+#| label: fig-hist-poor
+#| fig-cap: "Wealth distributions for poor agents under altruism ($\\zeta=0.1$) and no altruism ($\\zeta=0$)."
+#| fig-pos: 'H'
+#| echo: false
+#| message: false
+#| warning: false
+
+p_poor0 <- old_0_3x |> filter(type =="poor") |>
+  ggplot( aes(x = wealth)) +
+  geom_histogram(bins = 30, color = "black", alpha = 0.7, fill = "#F8766d") +
+    geom_vline(aes(xintercept = mean(wealth)), color = "blue", linetype = "dashed", size = 1) +
+  annotate(
+    "text",
+    x = mean(old_0_3x$wealth[old_0_3x$type == "poor"]),
+    y = 90,  # adjust up or down depending on your y-axis
+    label = paste0("Mean = ", round(mean(old_0_3x$wealth[old_0_3x$type == "poor"]), 3)),
+    color = "blue",
+    vjust = -10,
+    hjust = -0.1,
+    size = 4
+  ) +
+  labs(
+    title = "Zeta = 0",
+    x = "Rich Agent Wealth",
+    y = "Density"
+  ) +
+  ylim(0, 1300) +
+  xlim(-0.1,2) +
+  theme_minimal()
+
+# Second plot (zeta = 0.1)
+
+p_poor0.1 <- old_0.1_3x |> filter(type =="poor") |> 
+  ggplot(aes(x = wealth)) +
+  geom_histogram(bins = 30, color = "black", alpha = 0.7, fill = "#F8766d") +
+  geom_vline(aes(xintercept = mean(wealth)), color = "blue", linetype = "dashed", size = 1) +
+  annotate(
+    "text",
+    x = mean(old_0_3x$wealth[old_0_3x$type == "poor"]),
+    y = 90,  # adjust up or down depending on your y-axis
+    label = paste0("Mean = ", round(mean(old_0.1_3x$wealth[old_0.1_3x$type == "poor"]), 3)),
+    color = "blue",
+    vjust = -10,
+    hjust = -0.1,
+    size = 4
+  ) +
+  labs(
+    title = "Zeta = 0.1",
+    x = "Poor Agent Wealth",
+    y = "Density"
+  ) +
+  ylim(0, 1300) +
+  theme_minimal()
+
+# Put them side by side
+p_poor0 + p_poor0.1+ 
+  plot_annotation(
+    theme = theme(plot.title = element_text(hjust = 0.5, size = 16, face = "bold"))
+  )
+```
+
+In both @fig-hist-rich and @fig-hist-poor, we see that the wealth distributions under altruism appear flatter and less skewed. However, since mean wealth also increases under altruism, raw changes in spread can be misleading. To account for this, we next correct for changes in scale before formally analyzing distributional shape.
+
+#### Variance Scaling Correction
+
+When looking at the wealth histograms, it seems like the spread of wealth increases under altruism. However, since mean wealth also rises substantially, we have to correct for scaling effects before interpreting changes in dispersion. Variance scales with the square of a linear transformation factor. Specifically, if wealth increases by a factor of $a$, variance increases by $a^2$. We show this formally below, and then apply the correction to adjust standard deviations across groups.
+
+Variance is calculated as the second moment of the distribution. That is, $\sigma^2 = E[(X - \mu)^2]$, where $X$ is the variable and $\mu$ is the mean of the variable. If some wealth distribution $W_0$ has undergone a linear transformation so that $W_{0.1} = aW_0 + b$, then:
+
+```{=tex}
+\begin{align*}
+\sigma^2_{0.1} &= E[(aw_0-b - (a\mu_0-b))^2]\\
+&= E[(aw_0-a\mu_0)^2]\\
+&= E[a^2(w_0-\mu)^2]\\
+&= a^2E[(w_0-\mu)^2]\\
+&=a^2\sigma_{0.1}^2\\
+\end{align*}
+```
+Thus, the variance becomes scaled by a factor of $a^2$, and the standard deviation, $\sigma$, becomes scaled by a factor of $a$.
+
+```{r, include = FALSE}
+sd(old_0_3x$wealth[old_0_3x$type == "poor"])
+sd(old_0.1_3x$wealth[old_0.1_3x$type == "poor"])/1.51
+
+sd(old_0_3x$wealth[old_0_3x$type == "rich"])
+sd(old_0.1_3x$wealth[old_0.1_3x$type == "rich"])#/2.01
+
+var(old_0_3x$wealth[old_0_3x$type == "rich"])
+var(old_0.1_3x$wealth[old_0.1_3x$type == "rich"])
+
+var(old_0_3x$wealth[old_0_3x$type == "poor"])
+var(old_0.1_3x$wealth[old_0.1_3x$type == "poor"])
+
+var.test(old_0_3x$wealth[old_0_3x$type == "rich"], old_0.1_3x$wealth[old_0.1_3x$type == "rich"])
+```
+
+If we conservatively assume that in the base case change in mean is entirely due to scaling, we can correct for the increase in mean wealth by dividing standard deviation by the factor which wealth grew. With this method, we find that standard deviations of rich and poor agent wealth actually decrease under altruism. Interestingly, the decreased variance with altruism holds for the rich population even without scaling for difference in means. By an F test, the difference in variance is significant with $p < 10^{-10}$. This suggests that the wealth distributions become tighter relative to their scale. Though this is consistent with decreased inequality within groups, it is not easily visualizable in our histograms, motivating a closer look at higher distributional moments.
+
+#### Skewness and Kurtosis
+
+After correcting for scaling effects, we turn to higher moments of the wealth distribution to capture changes in shape more formally. Skewness, the third moment, measures the asymmetry of the distribution, while kurtosis, the fourth moment, measures the thickness of the tails relative to a normal distribution. Unlike variance, skewness and kurtosis are invariant to linear scaling and shifting (see Appendix C: Distributional Moments Under Linear Transformations). This makes them particularly useful for isolating true distributional changes under altruism. We compute these statistics for both rich and poor groups, with and without altruism.
+
+```{r}
+#| label: tbl-skew-kurt
+#| tbl-cap: "Skewness and kurtosis of wealth distributions for rich and poor agents, with and without altruism."
+#| results: 'asis'
+#| fig-pos: 'H'
+#| echo: false
+#| message: false
+#| warning: false
+
+library(knitr)
+
+# Build base data
+skew_kurt_table <- tibble(
+  Group = c("Rich", "Rich", "Poor", "Poor"),
+  Altruism = c("No Altruism", "Altruism", "No Altruism", "Altruism"),
+  Skewness = c(9.49, 5.32, 13.75, 8.01),
+  Kurtosis = c(138.6, 48.1, 281.3, 99.0)
+)
+
+# Make it long format
+skew_kurt_table_long <- skew_kurt_table |>
+  pivot_longer(cols = c(Skewness, Kurtosis), names_to = "Metric", values_to = "Value") |>
+  unite("MetricGroup", Metric, Group, sep = " (") |>
+  mutate(MetricGroup = paste0(MetricGroup, ")")) |>
+  pivot_wider(names_from = Altruism, values_from = Value)
+
+# Create a cleaned table
+kable(skew_kurt_table_long, format = "latex", booktabs = TRUE,
+      col.names = c("Metric", "No Altruism", "Altruism"))
+```
+
+```{r, include = FALSE}
+# Skewness
+skewness(old_0_3x$wealth[old_0_3x$type == "rich"])
+skewness(old_0.1_3x$wealth[old_0.1_3x$type == "rich"])
+
+skewness(old_0_3x$wealth[old_0_3x$type == "poor"])
+skewness(old_0.1_3x$wealth[old_0.1_3x$type == "poor"])
+
+# Kurtosis
+kurtosis(old_0_3x$wealth[old_0_3x$type == "rich"])
+kurtosis(old_0.1_3x$wealth[old_0.1_3x$type == "rich"])
+
+kurtosis(old_0_3x$wealth[old_0_3x$type == "poor"])
+kurtosis(old_0.1_3x$wealth[old_0.1_3x$type == "poor"])
+
+```
+
+```{r}
+#| label: fig-skewness
+#| fig-cap: "Skewness of wealth distributions, comparing rich and poor agents, with and without altruism ($\\zeta$ values)."
+#| fig-pos: 'H'
+#| echo: false
+#| message: false
+#| warning: false
+
+skew_kurt_df <- tibble(
+  type = c("Poor", "Poor", "Rich", "Rich"),
+  altruism = c("Zeta = 0", "Zeta = 0.1", "Zeta = 0", "Zeta = 0.1"),
+  skewness = c(
+    skewness(old_0_3x$wealth[old_0_3x$type == "poor"]),
+    skewness(old_0.1_3x$wealth[old_0.1_3x$type == "poor"]),
+    skewness(old_0_3x$wealth[old_0_3x$type == "rich"]),
+    skewness(old_0.1_3x$wealth[old_0.1_3x$type == "rich"])
+  )
+)
+
+# Plot skewness
+ggplot(skew_kurt_df, aes(x = altruism, y = skewness, fill = type)) +
+  geom_bar(stat = "identity", position = "dodge", color = "black", alpha = 0.8) +
+  facet_wrap(~ type, scales = "free_x") +
+  labs(
+    x = "Altruism Level",
+    y = "Skewness",
+    fill = "Wage Type"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    strip.text = element_text(size = 14, face = "bold"),
+    axis.text.x = element_text(angle = 0, hjust = 0.5)
+  )
+
+```
+
+```{r}
+#| label: fig-kurtosis
+#| fig-cap: "Kurtosis of wealth distributions, comparing rich and poor agents, with and without altruism ($\\zeta$ values)."
+#| fig-pos: 'H'
+#| echo: false
+#| message: false
+#| warning: false
+
+# Calculate skewness and kurtosis
+skew_kurt_df <- tibble(
+  type = c("Poor", "Poor", "Rich", "Rich"),
+  altruism = c("Zeta = 0", "Zeta = 0.1", "Zeta = 0", "Zeta = 0.1"),
+  kurtosis = c(
+    kurtosis(old_0_3x$wealth[old_0_3x$type == "poor"]),
+    kurtosis(old_0.1_3x$wealth[old_0.1_3x$type == "poor"]),
+    kurtosis(old_0_3x$wealth[old_0_3x$type == "rich"]),
+    kurtosis(old_0.1_3x$wealth[old_0.1_3x$type == "rich"])
+  )
+)
+
+# Plot kurtosis
+ggplot(skew_kurt_df, aes(x = altruism, y = kurtosis, fill = type)) +
+  geom_bar(stat = "identity", position = "dodge", color = "black", alpha = 0.8) +
+  facet_wrap(~ type, scales = "free_x") +
+  labs(
+    x = "Altruism Level",
+    y = "Kurtosis",
+    fill = "Wage Type"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    strip.text = element_text(size = 14, face = "bold"),
+    axis.text.x = element_text(angle = 0, hjust = 0.5)
+  )
+
+```
+
+As shown in @fig-skewness, @fig-kurtosis, and @tbl-skew-kurt, both skewness and kurtosis decrease under altruism for both rich and poor agents. Poor agents consistently exhibit higher skewness and kurtosis levels than rich agents, but also undergo a larger relative decline when altruism is introduced. This suggests that wealth distributions for poor agents are more sensitive to the stabilizing effects of altruistic bequests.
+
+As we will see in more detail shortly, the poor type wealth distribution begins with high kurtosis and skew compared to the rich population. This is due to a majority of poor agents having almost no wealth, but a small number of poor agents with rich parents having favorable bequests, which alter the data to have very significant skew and heavy tails. Because kurtosis and skewness depend on high-order moments (third and fourth powers of deviations from the mean), small reductions in the extreme tails of the distribution lead to disproportionately large reductions in measured kurtosis and skewness. Analytically, since the fourth moment grows with $(X-\mu)^4$, trimming even a small amount of extreme wealth results in an amplified impact on the numerator of the kurtosis ratio, while the denominator (variance) changes more slowly (for a more detailed proof, see Appendix C: Small Tail Reductions Cause Large Kurtosis Changes). So, it makes sense that we observe a greater proportional decrease in skewness and kurtosis in the poor population than the recih population.
+
+#### Relative Distribution Visualization
+
+To further isolate how altruism reshapes wealth distributions, we use relative distribution analysis. Relative distributions compare two distributions directly by examining the ratio of their densities at corresponding quantiles and correcting for differences in scale and location. Values above 1 indicate overrepresentation at a percentile relative to the baseline, and values below 1 indicate underrepresentation[@relative1999] (see Appendix C: Relative Distribution Methods for a more thorough discussion). This approach highlights exactly where the distribution shifts occur, whether in the middle, tails, or elsewhere.
+
+We normalize wealth separately within rich and poor agent groups, both with and without altruism, to ensure comparability and isolate changes in distributional shape rather than changes from a location-scale transformation as discussed earlier (see Appendix C, Normalized Distributions for proof).
+
+```{r, include = FALSE}
+poor_wealth_normalized_0.1 <- (old_0.1_3x$wealth[old_0.1_3x$type == "poor"] - mean(old_0.1_3x$wealth[old_0.1_3x$type == "poor"])) / sd(old_0.1_3x$wealth[old_0.1_3x$type == "poor"])
+poor_wealth_normalized_0<- (old_0_3x$wealth[old_0_3x$type == "poor"] - mean(old_0_3x$wealth[old_0_3x$type == "poor"])) / sd(old_0_3x$wealth[old_0_3x$type == "poor"])
+```
+
+```{r, include = FALSE}
+reldist_result_normalized <- reldist(y = poor_wealth_normalized_0, yo = poor_wealth_normalized_0.1, smooth = FALSE)
+```
+
+```{r}
+#| label: fig-reldist-poor
+#| fig-cap: "Relative density of poor agents' normalized wealth distributions under altruism vs. no altruism."
+#| fig-pos: 'H'
+#| echo: false
+#| message: false
+#| warning: false
+
+# Plot the relative distribution
+plot_data <- data.frame(
+  wealth = reldist_result_normalized$x,
+  relative_density = reldist_result_normalized$y
+)
+
+ggplot(plot_data, aes(x = wealth, y = relative_density)) +
+  geom_line(color = "black") +
+  geom_hline(yintercept = 1, linetype = "dashed", color = "gray") +
+  theme_minimal() +
+  labs(
+    title = "Relative Density vs Wealth",
+    x = "Wealth",
+    y = "Relative Density"
+  )
+
+
+```
+
+For poor agents, relative density is near zero below the 40th percentile, and exceeds one between approximately the 46th and 82nd percentiles. This indicates a gravitation toward middle-high wealth values under altruism, consistent with the lower skewness and tighter standard deviations observed earlier.
+
+```{r, include = FALSE}
+rich_wealth_normalized_0.1 <- (old_0.1_3x$wealth[old_0.1_3x$type == "rich"] - mean(old_0.1_3x$wealth[old_0.1_3x$type == "rich"])) / sd(old_0.1_3x$wealth[old_0.1_3x$type == "rich"])
+rich_wealth_normalized_0<- (old_0_3x$wealth[old_0_3x$type == "rich"] - mean(old_0_3x$wealth[old_0_3x$type == "rich"])) / sd(old_0_3x$wealth[old_0_3x$type == "rich"])
+
+reldist_result_normalized_rich <- reldist(y = rich_wealth_normalized_0.1, yo = rich_wealth_normalized_0, smooth = FALSE)
+```
+
+```{r}
+#| label: fig-reldist-rich
+#| fig-cap: "Relative density of rich agents' normalized wealth distributions under altruism vs. no altruism."
+#| fig-pos: 'H'
+#| echo: false
+#| message: false
+#| warning: false
+
+plot_data <- data.frame(
+  wealth = reldist_result_normalized_rich$x,
+  relative_density = reldist_result_normalized_rich$y
+)
+
+ggplot(plot_data, aes(x = wealth, y = relative_density)) +
+  geom_line(color = "black") +
+  geom_hline(yintercept = 1, linetype = "dashed", color = "gray") +
+  theme_minimal() +
+  labs(
+    title = "Relative Density vs Wealth",
+    x = "Wealth",
+    y = "Relative Density"
+  )
+```
+
+For rich agents, the relative density plot shows less clear centralization. A sharp spike appears within the lowest 3% of the distribution, indicating overrepresentation at the lower tail. Since wealth distributions are normalized, this does not imply that rich agents earn less with altruism, but rather reflects a longer left tail, which was very short to begin with due to skewness. This spike may correspond to rich agents with poor parents receiving smaller bequests, deviating further from the mean when familial wealth is not inherited early. Apart from this spike, a mild overrepresentation emerges between the 50th and 70th percentiles, consistent with a trend toward median values and reduced skewness.
+
+```{r}
+#| label: fig-normalized-density
+#| fig-cap: "Normalized rich wealth ditributions, with and without altruism."
+#| fig-pos: 'H'
+#| echo: false
+#| message: false
+#| warning: false
+
+plot_data <- data.frame(
+  wealth = c(rich_wealth_normalized_0, rich_wealth_normalized_0.1),
+  group = rep(c("Zeta = 0", "Zeta = 0.1"), times = c(length(rich_wealth_normalized_0), length(rich_wealth_normalized_0.1)))
+)
+
+# Plot
+ggplot(plot_data, aes(x = wealth, color = group, fill = group)) +
+  geom_density(alpha = 0.4) +
+  theme_minimal() +
+  labs(
+    title = "Normalized Rich Wealth Distributions",
+    x = "Standardized Wealth (Mean 0, SD 1)",
+    y = "Density",
+    color = "Group",
+    fill = "Group"
+  ) +
+  xlim(-5, 5)
+```
+
+To visualize these shifts further, @fig-normalized-density plots the normalized wealth densities for rich agents under altruism and no altruism. Although extreme tail behavior is difficult to detect directly, the decrease in skewness and peak height are evident. This compression around the mean contributes to the observed reduction in kurtosis
+
+### Composition of Wealth: Wages vs Bequests
+
+To more deeply understand why intratype wealth dynamics are changing as they are, we'll further analyze the composition of wealth between saved wages and received bequests. Changes in the relative importance of these sources drive shifts in both within-group and between-group inequality. We decompose total wealth into wage savings and bequest components, and analyze how their shares evolve under altruism.
+
+Total wealth is composed of three contributors: savings, recieved bequests, and capital returns.
+
+Due to natures of gini coeffecients and the proportion inequality measure, we don't worry about the absolute changes that these factors incur under altruism. Instead, we only need to concern ourselves with how these factors proportionally effect the wealth of agents. For example, at a discrete time step, every agent's wealth (savings and bequests) will be multiplied by the endogenous interest rate. Since everyone's wealth increases by the same factor, this has no effect on the gini coefficient, even though you could say wealthy agents benefit more absolutely from this mechanism.
+
+So, we will focus on savings and recieved bequests.
+
+#### Saved Wages
+
+Both savings and bequests contribute to changes in an agents wealth two-fold. Wages grow proportionally (Appendix E: $\alpha$, $\beta$, and $\gamma$), but bequests grow at different rates for different agents, for this reason, we examine both absolute and distributive changes in savings and bequests, as well as distributive changes in the fraction by which savings and bequests contribute to total wealth. First, we'll consider saved wages.
+
+```{r, include = FALSE}
+#mult by 1.844 because of interest
+old_0_labeled <- old_0_3x |>
+  mutate(
+    altruism = "Zeta = 0",
+    wage_contribution = (savings*1.844) / wealth,
+    bequest_contribution = (actual_bequest_from_parent*1.844) / wealth
+  )
+
+#interest is 1.57273
+old_0.1_labeled <- old_0.1_3x |>
+  mutate(
+    altruism = "Zeta = 0.1",
+    wage_contribution = (savings*1.57273) / wealth,
+    bequest_contribution = (actual_bequest_from_parent*1.57273) / wealth
+  )
+
+# Combine them
+combined_wealth_comp <- bind_rows(old_0_labeled, old_0.1_labeled)
+# Filter combined_wealth_comp to remove extreme values
+combined_wealth_comp_clean <- combined_wealth_comp |>
+  filter(
+    wage_contribution >= 0, wage_contribution <= 1,
+    bequest_contribution >= 0, bequest_contribution <= 1
+  )
+combined_wealth_comp_clean
+
+```
+
+```{r}
+#| label: fig-wage-contribution
+#| fig-cap: "Savings contribution to wealth by agent type and altruism level."
+#| fig-pos: 'H'
+#| echo: false
+#| message: false
+#| warning: false
+
+ggplot(combined_wealth_comp_clean, aes(x = wage_contribution, fill = altruism)) +
+  geom_density(alpha = 0.5) +
+  facet_wrap(~type) +
+  theme_minimal(base_size = 14) +
+  labs(
+    x = "Savings Contribution to Wealth",
+    y = "Density",
+    fill = "Altruism Level"
+  ) +
+  scale_x_continuous(
+  limits = c(0, 1),
+  breaks = seq(0, 1, by = 0.2)
+)+
+  theme(
+    strip.text = element_text(size = 14, face = "bold"),
+    axis.text.x = element_text(angle = 0, hjust = 0.5)
+  )
+```
+
+Notice that in the combined wealth composition data, the distributions of savings contribution to wealth appear bimodal. For the majority of agents—regardless of wage type or altruism level, bequests are the primary contributor to total wealth. However, there is a smaller subset of agents, roughly one-fourth, whose sole contributor to wealth is wage savings. These agents are largely orphans: because they receive either an early bequest or no bequest, their savings also consists of their bequest amount.
+
+To isolate the effects of altruism on typical saving behavior, we restrict attention to non-orphan agents in @fig-wage-density-nonorphan. Excluding orphans, the distribution of wage contributions becomes unimodal, and shows that for most non-orphans, wage savings comprise only a small fraction of their total wealth.
+
+```{r}
+#| label: fig-wage-density-nonorphan
+#| fig-cap: "Density of wage contribution to wealth by agent type and altruism level (non-orphan agents only)."
+#| fig-pos: 'H'
+#| echo: false
+#| message: false
+#| warning: false
+# Keep only non-orphans
+combined_wealth_comp_nonorphans <- combined_wealth_comp_clean |>
+  filter(orphan == 0)
+ggplot(combined_wealth_comp_nonorphans, aes(x = wage_contribution, fill = altruism)) +
+  geom_density(alpha = 0.5, position = "identity") +
+  facet_wrap(~type) +
+  scale_x_continuous(
+  limits = c(0, 1),
+  breaks = seq(0, 1, by = 0.2)
+) +
+  theme_minimal(base_size = 14) +
+  labs(
+    x = "Wage Contribution to Wealth",
+    y = "Density",
+    fill = "Altruism Level"
+  ) +
+  theme(
+    strip.text = element_text(size = 14, face = "bold"),
+    axis.text.x = element_text(angle = 0, hjust = 0.5)
+  )
+
+```
+
+Rich and poor agents' wages grow proportionally, so if altruism significantly increased the wage contribution to wealth, we would expect this to act as an equalizing force between wage groups. Additionally, since wages are constant within a wage group (and generation), we would expect it to act as an equalizing force within the group.
+
+For both rich and poor agents, we observe that altruism increases the kurtosis of the wage contribution distribution. That is, altruism induces a greater density around high wage-contribution values. Although this pattern occurs in both groups, it is more pronounced among rich agents. This can be rationalized as follows: Without altruism, most agents—whether rich or poor—opt to consume the majority of their wages during the young period, as there is no strong incentive to defer consumption. With altruism, this remains true for many agents, but a subset now saves more aggressively to leave intentional bequests. These agents exhibit higher wage contributions to their overall wealth.
+
+Within a wage group, such as the rich, the primary factor separating agents is their expected bequest receipt. Agents anticipating a large inheritance optimize by consuming more in youth, relying on future wealth. Agents expecting a smaller inheritance must self-fund more of their old-age wealth, and therefore save a greater share of their wages in the young period. This heterogeneity in saving behavior leads to increased kurtosis in the wage contribution distribution.
+
+Recall that bequests are also a luxury good. Agents do not leave them unless they sufficiently satisfy their own consumption. However, an agent who expects a large bequest will still not save more, they will consume in the young period and would save in the old period, once they've recieved their bequest.
+
+#### Bequests
+
+Under altruism, rich agents face different incentives to save based on their expected bequests. Agents who anticipate receiving a large inheritance have less motivation to save in the young period, while agents expecting smaller or no bequests increase savings to self-fund future consumption and intended bequests. This heterogeneity stabilizes total savings amounts—more agents save some positive fraction of their wages—resulting in a decline in the kurtosis of savings amounts. However, because realized bequests remain highly variable due to stochastic death timing, the share of wealth coming from wage savings becomes more dispersed across agents. Some agents' wealth is largely composed of their own savings, while others' wealth is dominated by large inheritances. Consequently, while savings amounts themselves become less extreme, the distribution of savings contributions relative to total wealth becomes more fat-tailed. This tension helps explain how altruism can simultaneously reduce kurtosis in total wealth while increasing kurtosis in the savings contribution ratio and the bequest distribution.
+
+```{r}
+#| label: fig-bequest-density-poor
+#| fig-cap: "Density of actual bequest amounts received by rich agents, with and without altruism."
+#| fig-pos: 'H'
+#| echo: false
+#| message: false
+#| warning: false
+
+poor_bequest_df <- tibble(
+  bequest = c(old_0_3x$actual_bequest_from_parent[old_0_3x$type == "rich"],
+              old_0.1_3x$actual_bequest_from_parent[old_0.1_3x$type == "rich"]),
+  altruism = rep(c("Zeta = 0", "Zeta = 0.1"), 
+                 times = c(length(old_0_3x$actual_bequest_from_parent[old_0_3x$type == "rich"]),
+                           length(old_0.1_3x$actual_bequest_from_parent[old_0.1_3x$type == "rich"])))
+)
+
+# Plot
+ggplot(poor_bequest_df, aes(x = bequest, fill = altruism, color = altruism)) +
+  geom_density(alpha = 0.5, position = "identity") +
+  theme_minimal(base_size = 14) +
+  labs(
+    x = "Bequest Amount Received",
+    y = "Density",
+    #title = "Rich Agents: Bequest Distributions"
+  ) +
+  xlim(0,1)+
+  theme(
+    legend.position = "top",
+    strip.text = element_text(size = 14, face = "bold")
+  )
+```
+
+Although altruism increases the variability of realized bequest sizes, much of this variability becomes predictable to agents during their lifetimes. In contrast to the no-altruism case, where bequest amounts depend heavily on random parental death timing, altruism allows agents to anticipate expected transfers based on accumulated lineage wealth and known parental saving behavior. This greater predictability enables better consumption smoothing and savings optimization, which acts as a centralizing force on wealth distributions. Even though ex post bequest inequality grows, ex ante uncertainty falls, leading to reduced within-generation wealth dispersion.
+
+@fig-kurtosis-bequest shows that the kurtosis of realized bequests declines substantially under altruism for both rich and poor agents, indicating that extreme bequest events become less dominant.
+
+```{r}
+#| label: fig-kurtosis-bequest
+#| fig-cap: "Kurtosis of realized bequest amounts for rich and poor agents under altruism ($\\zeta=0.1$) and no altruism ($\\zeta=0$). Lower kurtosis indicates thinner tails and fewer extreme transfers."
+#| fig-pos: 'H'
+#| echo: false
+#| message: false
+#| warning: false
+
+bequest_kurtosis_df <- tibble(
+  type = c("Poor", "Poor", "Rich", "Rich"),
+  altruism = c("Zeta = 0", "Zeta = 0.1", "Zeta = 0", "Zeta = 0.1"),
+  kurtosis = c(
+    kurtosis(old_0_3x$actual_bequest_from_parent[old_0_3x$type == "poor"]),
+    kurtosis(old_0.1_3x$actual_bequest_from_parent[old_0.1_3x$type == "poor"]),
+    kurtosis(old_0_3x$actual_bequest_from_parent[old_0_3x$type == "rich"]),
+    kurtosis(old_0.1_3x$actual_bequest_from_parent[old_0.1_3x$type == "rich"])
+  )
+)
+
+# Plot
+ggplot(bequest_kurtosis_df, aes(x = altruism, y = kurtosis, fill = type)) +
+  geom_bar(stat = "identity", position = "dodge", color = "black") +
+  facet_wrap(~type) +
+  theme_minimal(base_size = 14) +
+  labs(
+    x = "Altruism Level",
+    y = "Kurtosis of Bequest Amounts",
+    fill = "Agent Type"
+  )
+```
+
+In summary, altruism induces greater savings heterogeneity within wage groups, but overall compresses the distribution of total wealth by stabilizing lifetime resources through both wage savings and intentional bequests. This within-group compression drives the observed decrease in the Gini coefficient. However, because the magnitude of bequests grows disproportionately for rich agents relative to poor agents, the average wealth gap between groups widens. As a result, the proportion of total wealth held by rich agents increases, even while overall wealth inequality, as measured by the Gini, falls. This highlights how within-group and between-group inequality can move in opposite directions under altruistic preferences.
+
+Although altruism increases the variation in realized bequest sizes, much of this variation becomes predictable to agents during their lifetime. In contrast to the no-altruism case, where bequest amounts depend heavily on random parental death timing, altruism allows agents to anticipate expected transfers based on accumulated lineage wealth and known parental saving behavior. This greater predictability enables better consumption smoothing and savings optimization, which acts as a centralizing force on wealth distributions. Even though ex post bequest inequality grows, ex ante uncertainty falls, leading to reduced within-generation wealth dispersion.
+
+#### Orphan Agents
+
+A clean test of the information effect comes from examining orphans. Orphans receive their bequests before solving their optimization problem and thus face no uncertainty regarding lifetime wealth. If predictability indeed improves consumption smoothing and compresses outcomes, we should observe lower inequality among orphans compared to the general population even though their wealth levels remain more variable.
+
+Because orphan agents lack intentionally planned transfers and depend solely on the timing of parental death, they experience greater volatility in bequest amounts but lower uncertainty about total lifetime wealth. If uncertainty had little to no effect on inequality, we would expect the effect of their more volatile bequests to dominate and that the orphan population would experience greater levels of inequality.
+
+```{r, include = FALSE}
+# Combine orphan and non-orphan bequests under zeta = 0.1
+bequest_compare_0.1 <- bind_rows(
+  old_0.1_3x |>
+    filter(orphan == 1) |>
+    transmute(
+      bequest_received = available_bequest_young,
+      type = "Orphan",
+      altruism = "Zeta = 0.1"
+    ),
+  old_0.1_3x |>
+    filter(orphan == 0) |>
+    transmute(
+      bequest_received = actual_bequest_from_parent,
+      type = "Non-Orphan",
+      altruism = "Zeta = 0.1"
+    )
+)
+
+# (Optional) Repeat for zeta = 0 if you want both scenarios
+bequest_compare_0 <- bind_rows(
+  old_0_3x |>
+    filter(orphan == 1) |>
+    transmute(
+      bequest_received = available_bequest_young,
+      type = "Orphan",
+      altruism = "Zeta = 0"
+    ),
+  old_0_3x |>
+    filter(orphan == 0) |>
+    transmute(
+      bequest_received = actual_bequest_from_parent,
+      type = "Non-Orphan",
+      altruism = "Zeta = 0"
+    )
+)
+
+# Combine for plotting
+bequest_all <- bind_rows(bequest_compare_0, bequest_compare_0.1)
+
+```
+
+```{r}
+#| label: fig-orphan-beq-dist
+#| fig-cap: "Distributions of bequest amounts recieved by orphans and non-orphans."
+#| fig-pos: 'H'
+#| echo: false
+#| message: false
+#| warning: false
+
+ggplot(bequest_all, aes(x = bequest_received, fill = type)) +
+  geom_density(alpha = 0.5) +
+  facet_wrap(~altruism) +
+  labs(
+    #title = "Distribution of Bequests: Orphans vs Non-Orphans",
+    x = "Bequest Received",
+    y = "Density",
+    fill = "Agent Type"
+  ) +
+  xlim(0, 0.6) +
+  theme_minimal(base_size = 14)
+```
+
+```{r, include= FALSE}
+# Filter just zeta = 0.1
+orphan_vals <- bequest_all |> filter(altruism == "Zeta = 0.1", type == "Orphan") |> pull(bequest_received)
+nonorphan_vals <- bequest_all |> filter(altruism == "Zeta = 0.1", type == "Non-Orphan") |> pull(bequest_received)
+
+var.test(orphan_vals, nonorphan_vals, alternative = "greater")
+library(e1071)
+
+skewness(orphan_vals)
+skewness(nonorphan_vals)
+```
+
+```{r, include = FALSE}
+orphan_vals <- bequest_all |> filter(altruism == "Zeta = 0", type == "Orphan") |> pull(bequest_received)
+nonorphan_vals <- bequest_all |> filter(altruism == "Zeta = 0", type == "Non-Orphan") |> pull(bequest_received)
+
+var.test(orphan_vals, nonorphan_vals, alternative = "greater")
+```
+
+We find that the variance of of orphan bequest distributions is increased compared the the variance of non-orphan bequest distributions. However, as before, the mean of these differences is also different. In the next section, we will show how and why the expected orphan bequest is greater than the expected non-oprhan bequest. For now, we can simplify that if the entire change in mean was due to a scaling transformation, and we scale by the difference, we will still see an increase in variance. So, we can safely say that orphan bequests have greater variability that non-orphan bequests.
+
+```{r, include = FALSE}
+# For zeta = 0.1
+orphan_0.1 <- bequest_all |> 
+  filter(altruism == "Zeta = 0.1", type == "Orphan") |> 
+  pull(bequest_received)
+
+nonorphan_0.1 <- bequest_all |> 
+  filter(altruism == "Zeta = 0.1", type == "Non-Orphan") |> 
+  pull(bequest_received)
+
+t_test_0.1 <- t.test(orphan_0.1, nonorphan_0.1, alternative = "two.sided", var.equal = FALSE)
+
+# For zeta = 0
+orphan_0 <- bequest_all |> 
+  filter(altruism == "Zeta = 0", type == "Orphan") |> 
+  pull(bequest_received)
+
+nonorphan_0 <- bequest_all |> 
+  filter(altruism == "Zeta = 0", type == "Non-Orphan") |> 
+  pull(bequest_received)
+
+t_test_0 <- t.test(orphan_0, nonorphan_0, alternative = "two.sided", var.equal = FALSE)
+
+# Print results
+t_test_0.1
+t_test_0
+```
+
+##### Expected Bequests for Orphan and Non-Orphan Agents
+
+In the version of the model without altruism, agents receive bequests according to their parent's death age, with no intentional bequest aspect. If an agent's parent dies before making a bequest transfer, the agent is labeled an orphan; otherwise, they are a non-orphan. The structure of the bequest received differs by orphan status and depends on the age at which the parent dies ($d$), the parent’s savings (net of grandparental transfers) ($s$), and the bequest received from a grandparent ($b$).
+
+The bequest received by an orphan agent is given by: 
+$$
+a_o = \frac{s \cdot d}{40} + b
+$$ 
+
+where $d$ is the parent's age at death (drawn from an empirical mortality distribution). For non-orphan agents, who receive bequests later in life, the structure is: 
+
+$$
+a_n = \frac{(w + b)(100 - d)}{40}
+$$
+
+To evaluate and compare these bequest structures analytically, we compute expected values under the assumption that $w$, $b$, and $d$ are independent random variables. This assumption is justified in our model structure, where parental wealth and age at death are assigned independently, and grandparental bequests are drawn separately.
+
+Using the linearity of expectation and the independence of variables, the expected bequest for orphans becomes: 
+
+$$
+\mathbb{E}[a_o] = \frac{1}{40} \mathbb{E}[w] \cdot \mathbb{E}[d_o] + \mathbb{E}[b]
+$$
+and for non-orphans:
+$$
+\mathbb{E}[a_n] = \frac{1}{40} \left( \mathbb{E}[w] + \mathbb{E}[b] \right) \cdot (100 - \mathbb{E}[d_n])
+$$
+
+We define $\mu_w = \mathbb{E}[w]$ and $\mu_b = \mathbb{E}[b]$, and use empirically estimated mean death ages of $\mathbb{E}[d_o] = 47$ and $\mathbb{E}[d_n] = 82$, yielding: 
+$$
+\mathbb{E}[a_o] = \frac{47}{40} \mu_w + \mu_b, \qquad
+\mathbb{E}[a_n] = \frac{18}{40} (\mu_w + \mu_b)
+$$
+
+The ratio of expected orphan to non-orphan bequests is therefore: 
+$$
+\frac{\mathbb{E}[a_o]}{\mathbb{E}[a_n]} = 
+\frac{\frac{47}{40} \mu_w + \mu_b}{\frac{18}{40} (\mu_w + \mu_b)} =
+\frac{47 \mu_w + 40 \mu_b}{18 (\mu_w + \mu_b)}
+$$
+
+This expression allows us to analytically evaluate how the distribution of parental wealth and grandparental bequests influences the comparative outcomes for orphan and non-orphan agents. Because the orphan structure places greater weight on $w$, the ratio is increasing in $\mu_w / \mu_b$.
+
+Using empirical values $\mu_w = 0.0089$ and $\mu_b = 0.0328$, we compute: 
+$$
+\mathbb{E}[a_o] = 1.175 \cdot 0.0089 + 0.0328 = 0.0433, \qquad
+\mathbb{E}[a_n] = 0.45 \cdot (0.0089 + 0.0328) = 0.0188
+$$ 
+
+$$
+\Rightarrow \frac{\mathbb{E}[a_o]}{\mathbb{E}[a_n]} \approx 2.31
+$$
+
+Which is reasonably close to what we find in the simulation, that orphans recieve a bequest on average 2.42 times the bequest of non orphans.
+
+```{r, include = FALSE}
+# Subset ages 20 to 60
+subset_20_60 <- true_prob_deaths |>
+  filter(age >= 20, age <= 60)
+
+# Renormalize probabilities
+subset_20_60 <- subset_20_60 |>
+  mutate(prob_cond = prob_of_death / sum(prob_of_death))
+
+# Compute expected value
+expected_death_20_60 <- sum(subset_20_60$age * subset_20_60$prob_cond)
+#47.2418
+
+# Subset ages 60 to 100
+subset_60_100 <- true_prob_deaths |>
+  filter(age >= 60, age <= 100)
+
+# Renormalize
+subset_60_100 <- subset_60_100 |>
+  mutate(prob_cond = prob_of_death / sum(prob_of_death))
+
+# Expected value
+expected_death_60_100 <- sum(subset_60_100$age * subset_60_100$prob_cond)
+#81.97838
+```
+
+```{r, include = FALSE}
+# Filter to orphan agents
+orphan_data <- old_0.1_3x |>
+  filter(orphan == 1)
+
+# Estimate lambda as ratio of grandparental bequest to parental wealth
+lambda_estimate <- mean(orphan_data$available_bequest_young, na.rm = TRUE) /
+                   mean(orphan_data$wealth, na.rm = TRUE)  # <-- substitute correct column for parental wealth
+
+
+expected_d_orphan <- 47.24
+expected_d_nonorphan <- 81.98
+
+numerator <- expected_d_orphan + 40 * lambda_estimate
+denominator <- (1 + lambda_estimate) * (100 - expected_d_nonorphan)
+
+theoretical_ratio <- numerator / denominator
+
+
+
+old_0_3x |>
+  filter(orphan %in% c(1)) |>
+  #group_by(orphan) |>
+  summarise(
+    mean_wealth = mean(wealth, na.rm = TRUE),
+    mean_beq = mean(available_bequest_young+actual_bequest_from_parent),
+    mean_savings = mean(savings, na.rm = TRUE),
+    mean_planned_beq = mean(bequest_amount))
+
+library(dplyr)
+
+old_0_3x |>
+  filter(orphan %in% c(0, 1), type == "rich") |>
+  count(orphan, name = "num_agents")
+
+old_0_3x |>
+  filter(orphan %in% c(0, 1), type == "poor") |>
+  count(orphan, name = "num_agents")
+
+
+```
+
+Despite the greater variability in bequests, as shown in @fig-gini-orphan, orphan agents have lower Gini coefficients than the overall population.
+
+```{r, include = FALSE}
+library(tidyverse)
+library(dplyr)
+library(ineq)  # For Gini calculation
+
+
+# Filter to orphans and extract wealth vectors
+orphans_0 <- old_0_3x |> 
+  filter(orphan %in% c(1)) |>
+  pull(wealth)
+
+orphans_0.1 <- old_0.1_3x |>
+  filter(orphan %in% c(1)) |>
+  pull(wealth)
+
+
+# Calculate Gini coefficients
+gini_0 <- Gini(orphans_0)
+gini_0.1 <- Gini(orphans_0.1) 
+
+gini_0_everyone <- Gini(old_0_3x$wealth)
+gini_0.1_everyone <- Gini(old_0.1_3x$wealth)
+
+
+
+
+
+# Replace these with your actual Gini values
+gini_data <- tibble(
+  Altruism = c("No Altruism", "No Altruism", "Altruism", "Altruism"),
+  Group = c("Overall", "Orphans", "Overall", "Orphans"),
+  Gini = c(gini_0_everyone, gini_0, gini_0.1_everyone, gini_0.1)  # <-- replace with your true numbers
+)
+
+```
+
+
+```{r}
+#| label: fig-gini-orphan
+#| fig-cap: "Gini coefficients for orphan agents compared to the overall population under altruism ($\\zeta=0.1$) and no altruism ($\\zeta=0$)."
+#| fig-pos: 'H'
+#| echo: false
+#| message: false
+#| warning: false
+
+
+# Step 1: Reshape to long format
+gini_long <- results0_3x |>
+  select(average_gini_orphan, average_gini_nonorphan) |>
+  pivot_longer(
+    cols = everything(),
+    names_to = "group",
+    values_to = "gini"
+  )
+
+# Step 2: Plot
+ggplot(gini_long, aes(x = group, y = gini)) +
+  geom_boxplot(alpha = 0.6) +
+  labs(
+    #title = "Comparison of Average Gini Coefficients",
+    x = "",
+    y = "Gini Coefficient"
+  ) +
+  theme_minimal()
+```
+
+```{r, include = FALSE}
+t.test(results0_3x$average_gini_orphan,results0_3x$average_gini_nonorphan)
+```
+On average, the gini coefficient of the orphan population is 0.397, compared to the non-orphan population's gini of 0.651. A Welch's two-sample t-test confirms that the difference in Gini coefficients is highly significant, with a p-value of less than $10^{-16}$.
+
+Although orphan agents have full information, the initial dispersion in inherited wealth remains substantial. Combined with curvature in utility functions (CRRA), this prevents complete convergence in lifetime outcomes, explaining why the Gini drop for orphans is moderate rather than dramatic. For reference, complete convergence of wealth within the poor and rich populations would result in a Gini of 0.204 (see appendix C for calculation).
+
+#### Wealth Inequality Conclusion
+
+Introducing altruism alters the dynamics of wealth accumulation both within and between groups. One key within-group effect is the compression of the wealth distribution: agents of the same wage type become more similar in lifetime wealth outcomes.
+
+Under altruism, intentional bequest motives induce parents to save systematically for their offspring. Although random death timing introduces noise, a large fraction of future wealth becomes predictable based on parental saving behavior. This predictability enables agents to smooth consumption across their lifetimes more effectively, leading to a compression of the wealth distribution within wage types.
+
+Empirically, this compression is reflected in a significant decline in within-group variance, skewness, and kurtosis, and is captured by a fall in the overall Gini coefficient. However, between-group inequality behaves differently: because bequest magnitudes grow disproportionately for rich agents, the average wealth gap between wage groups widens. As a result, the proportion of total wealth held by rich agents increases, even as overall wealth inequality falls.
+
+Thus, within-group equality and between-group divergence coexist under altruistic preferences.
+
+#### Consumption Inequality
+
+```{r}
+#| label: fig-consumption-gini
+#| fig-cap: "Gini coefficient of total consumption under altruism ($\\zeta=0.1$) and no altruism ($\\zeta=0$)."
+#|fig-pos: 'H'
+#| echo: false
+#| message: false
+#| warning: false
+
+combined_results_3x |>
+  mutate(zeta = factor(zeta)) |>
+  ggplot(aes(x = zeta, y = average_gini_consumption)) +
+  geom_boxplot() +
+  labs(
+    #title = "Consumption Inequality by Altruism (Low Wage Inequality)",
+    x = "Altruism (zeta)",
+    y = "Consumption Gini Coefficient"
+  ) +
+  theme_minimal()
+```
+
+```{r, include = FALSE}
+t.test(average_gini_consumption ~ zeta, data = combined_results_3x, var.equal = FALSE)
+```
+
+We now turn to consumption inequality, measured by the Gini coefficient of lifetime total consumption. @fig-consumption-gini shows that altruism slightly decreases consumption inequality, from 0.328 to 0.321. By Welch's two-sample t-test, this is a significant decrease (p = 0.012), but not as significant as our other results.
+
+Unlike with wealth, the fraction of consumption by rich agents over total consumption also decreases. However, this decrease is small (69.1% to 69.0%) and statistically insignificant by a t-test (p = 0.94). 
+
+```{r, include = FALSE}
+mean(old_0_3x$total_cons[old_0_3x$type == "rich"])/(4*mean(old_0_3x$total_cons))
+#percent owned with altruism
+mean(old_0.1_3x$total_cons[old_0.1_3x$type == "rich"])/(4*mean(old_0.1_3x$total_cons))
+mean(combined_results_3x$avg_rich_wealth[combined_results_3x$ zeta == 0.1])/(4*mean(combined_results_3x$mean_wealth[combined_results_3x$ zeta == 0.1]))
+
+t.test(old_0_3x$total_cons[old_0_3x$type == "rich"]/(4 *mean(old_0_3x$total_cons)), (old_0.1_3x$total_cons[old_0.1_3x$type == "rich"])/(4*mean(old_0.1_3x$total_cons)))
+
+t.test(old_0_3x$optimal_ct[old_0_3x$type == "rich"]/(4 *mean(old_0_3x$optimal_ct)), (old_0.1_3x$optimal_ct[old_0.1_3x$type == "rich"])/(4*mean(old_0.1_3x$optimal_ct)))
+```
+
+
+```{r, include = FALSE}
+#| label: fig-density-consumption-0
+#| fig-cap: "Density of total consumption for rich and poor agents without altruism ($\\zeta=0$)."
+#| fig-pos: 'H'
+#| echo: false
+#| message: false
+#| warning: false
+#### Density of Total Consumption by Type
+
+#@fig-density-consumption-0 and @fig-density-consumption-0.1 show the density plots of total consumption for rich and poor agents, under no altruism and altruism respectively.
+
+# Filter rich and poor agents from zeta = 0 (no altruism) dataset
+cons_rich_poor_0 <- old_0_3x |>
+  filter(type %in% c("rich", "poor")) |>
+  mutate(type = factor(type, levels = c("rich", "poor")))
+
+# Plot density
+ggplot(cons_rich_poor_0, aes(x = total_cons, fill = type)) +
+  geom_density(alpha = 0.6) +
+  xlim(0,2)+
+  labs(
+    title = "Density of Total Consumption: Rich vs Poor (No Altruism)",
+    x = "Total Consumption",
+    y = "Density",
+    fill = "Agent Type"
+  ) +
+  theme_minimal(base_size = 14)
+```
+
+
+```{r, include = FALSE}
+#| label: fig-density-consumption-0.1
+#| fig-cap: "Density of total consumption for rich and poor agents with altruism ($\\zeta=0.1$)."
+#| fig-pos: 'H'
+#| echo: false
+#| message: false
+#| warning: false
+# Filter rich and poor agents from zeta = 0 (no altruism) dataset
+cons_rich_poor_0.1 <- old_0.1_3x |>
+  filter(type %in% c("rich", "poor")) |>
+  mutate(type = factor(type, levels = c("rich", "poor")))
+
+# Plot density
+ggplot(cons_rich_poor_0.1, aes(x = total_cons, fill = type)) +
+  geom_density(alpha = 0.6) +
+  xlim(0,2)+
+  labs(
+    title = "Density of Total Consumption: Rich vs Poor (Altruism)",
+    x = "Total Consumption",
+    y = "Density",
+    fill = "Agent Type"
+  ) +
+  theme_minimal(base_size = 14)
+
+```
+
+```{r, include = FALSE}
+mean(old_0.1_3x$total_cons[old_0.1_3x$type == "rich"])/mean(old_0.1_3x$total_cons[old_0.1_3x$type == "poor"])
+mean(old_0_3x$total_cons[old_0.1_3x$type == "rich"])/mean(old_0_3x$total_cons[old_0.1_3x$type == "poor"])
+```
+
+These figures reveal a notable flattening of rich agents' consumption distributions under altruism. Specifically, the right tail of rich agents' consumption distribution contracts, meaning fewer extremely high consumption outcomes.
+
+As altruism increases, the model shows a decline in both wealth and consumption inequality. However, the decline in the consumption Gini coefficient is more modest than the decline in the wealth Gini. In other words, while the distribution of accumulated wealth becomes more equal across the population, this equalization does not translate fully into consumption patterns.
+
+This result reflects several structural features of the model. First, consumption is smoothed across periods through intertemporal optimization. Agents face a CRRA utility function, and as a result, increases in wealth generate only modest increases in consumption. Marginal utility is diminishing, so additional bequest income received by rich agents primarily contributes to higher savings and larger bequests of their own, rather than substantially altering their consumption profiles. This smoothing effect dampens the impact of top-end wealth concentration on overall consumption inequality.
+
+Second, the effect of bequests—central to the wealth inequality—is less direct in consumption. Bequests increase wealth, but that wealth is allocated across future consumption and savings. For rich agents, larger bequests compound over generations, increasing inequality in the wealth distribution. But since they are already at the flat part of the utility curve, their increased wealth does not materially raise consumption. Poorer agents, meanwhile, receive smaller bequests, and while their marginal propensity to consume is higher, the absolute size of their gains is not large enough to shift overall consumption inequality substantially.
+
+Together, these forces produce a situation where altruism reduces both wealth and consumption inequality, but with a less dramatic effect in consumption. The Gini coefficient for consumption declines modestly, and the proportion of total consumption accounted for by rich agents falls slightly but not significantly. These findings underscore the distinction between wealth and consumption as inequality measures: the former is highly sensitive to bequest flows and accumulation dynamics, while the latter reflects both smoothing behavior and the concavity of preferences. In this model, altruism acts more powerfully on long-run capital accumulation than on immediate disparities in living standards.
+
+### Aggregate Effects: Altruism, Capital Accumulation, and Output Growth
+
+As derived analytically in the optimization problem section of the model, altruistic preferences ($\zeta$) increase agents' incentives to save during the young period, thereby raising aggregate capital accumulation $K$. This expansion of capital moves the economy rightward along the Cobb-Douglas production frontier, leading to higher total output $Y$ and higher wages for both rich and poor agents.
+
+Our simulation results confirm this mechanism. @fig-production-frontier plots the production frontier $Y = f(K)$ and illustrates how an increase in aggregate capital, driven by higher altruism, results in greater output. In the figure, the blue point represents the lower level of capital accumulation under low altruism, while the red point represents the higher capital stock under high altruism.
+
+```{r}
+#| label: fig-production-frontier
+#| fig-cap: The production frontier shows how an increase capital available increases output with diminishing marginal utility. 
+#| fig-pos: 'H'
+#| echo: false
+#| message: false
+#| warning: false
+# Set parameters
+alpha <- 0.3   # Capital elasticity
+beta <- 0.35    # Rich labor elasticity
+gamma <- 0.35   # Poor labor elasticity
+Lr <- 250      # Rich labor supply
+Lp <- 750      # Poor labor supply
+
+# Cobb-Douglas production function
+production_function <- function(K) {
+  K^alpha * Lr^beta * Lp^gamma
+}
+
+# Generate a sequence of K values
+K_values <- seq(1, 500, by = 1)
+Y_values <- production_function(K_values)
+
+# Plot
+library(ggplot2)
+
+df <- data.frame(K = K_values, Y = Y_values)
+
+ggplot(df, aes(x = K, y = Y)) +
+  geom_line(size = 1.2) +
+  geom_point(aes(x = 150, y = production_function(150)), color = "#00bfc4", size = 3) +
+  geom_point(aes(x = 300, y = production_function(300)), color = "#F8766d", size = 3) +
+  annotate("text", x = 150, y = production_function(150) + 50, label = "Lower K (low altruism)", color = "#00bfc4") +
+  annotate("text", x = 300, y = production_function(300) + 50, label = "Higher K (high altruism)", color = "#F8766d") +
+  labs(
+    title = "Production Frontier: Effect of Altruism on Capital and Output",
+    x = "Aggregate Capital (K)",
+    y = "Output (Y)"
+  ) +
+  theme_minimal()
+
+```
+
+The production frontier shows how an increase in available capital raises output, though with diminishing marginal returns. Moving from the blue point (lower $K$) to the red point (higher $K$) reflects the effect of altruism-driven savings growth.
+
+Thus, consistent with the model's predictions, altruism not only affects the distribution of wealth but also systematically enlarges the size of the economy in steady-state.
+
+Output $Y$ is directly proportional with both the rich and poor wage rates, $$
+w_r = \beta \frac{Y}{L_r}, \quad w_p = \gamma \frac{Y}{L_p}
+$$ So, with increased output, there are increased wages for both the rich and poor populations.
+
+The increase in aggregate output and wages also translates into higher lifetime consumption levels. As wages $w$ rise for both rich and poor agents, agents enter their young period with greater income, raising their budget constraint $w = c_t + s$. Although altruistic preferences induce higher saving rates, the overall increase in wages allows agents to both save more and consume more in absolute terms compared to the low-altruism steady-state. Given that the ratio $\frac{c_{t+1}}{c_t}$ is determined by the intertemporal Euler condition and remains constant across altruism levels, the entire consumption path shifts upward proportionally as wages rise. Thus, altruism-driven capital accumulation not only increases total output and wealth, but also enables higher absolute consumption across generations.
+
+# Conclusion
+
+This paper examined how introducing altruistic preferences affects intergenerational wealth and consumption inequality in a two-period overlapping generations model. Agents choose consumption, savings, and bequests to maximize lifetime utility, with altruism modeled as a preference for leaving bequests to the next generation. The model incorporates wage heterogeneity and stochastic inheritance to reflect real-world uncertainty.
+
+The simulation results show that altruism has both equalizing and unequal effects. On one side, it significantly reduces overall wealth inequality. Gini coefficients decline, Lorenz curves flatten, and measures like skewness and kurtosis suggest more compressed wealth distributions within each wage group. These changes are largely driven by the fact that intentional bequesting reduces randomness in future wealth, making life outcomes more predictable. Even among orphans, who inherit with certainty, we see similar distributional compression, highlighting the role of information and planning in shaping inequality.
+
+At the same time, altruism increases between-group inequality. Wealthier agents are able to give larger bequests, and these grow more quickly than those of poorer agents. In effect, bequests function like a luxury good. As a result, the share of total wealth held by high-wage agents rises under altruism. So while inequality within each group narrows, inequality between groups widens. These results align with Elinder et al. (2018), who find that inheritances tend to reduce relative inequality while increasing absolute wealth dispersion—suggesting that even simple models of altruism and bequests can capture key features of real-world wealth dynamics.
+
+Consumption inequality also declines with altruism, though less dramatically than wealth inequality. Rich agents save more when motivated by bequest preferences, and this reduces extreme consumption outcomes. The gap in average consumption across groups narrows slightly as well.
+
+These distributional results reflect a broader trade-off. Altruism reduces luck-based inequality within groups by stabilizing future resources, but it also amplifies structural inequality if initial endowments are unequal. Still, there is a general equilibrium benefit that should not be overlooked. Because altruism increases savings, it raises the overall capital stock in the economy. This, in turn, leads to higher total output and higher wages for all agents. So even though relative inequality across groups may increase, absolute economic outcomes improve for everyone.
+
+## Limitations and Future Directions
+
+The model, by design, involves simplifications. CRRA utility allows for analytical solutions, but it assumes constant consumption smoothing that may not reflect the liquidity constraints faced by lower-income agents. The assumption of even consumption flows within periods, despite discounting between them, also introduces a slight inconsistency. A fully optimizing agent would likely frontload some intra-period consumption when future utility is discounted.
+
+Another limitation is that the model only considers positive bequests. In reality, children can impose net financial costs on parents, especially in lower-income families. Modeling this "negative bequest" could change the dynamics of intergenerational transfers, particularly in terms of which households choose to have children and how they allocate resources across the life cycle.
+
+There are several promising directions for future research. One is to explore how varying the curvature of the bequest utility function affects savings and inequality. Another is to add public transfers, social insurance, or taxes, which would allow for the study of redistribution and policy interventions. Introducing assortative mating across income groups could also deepen the model’s realism and help assess how family structure influences long-term inequality dynamics.
+
+## Final Thoughts
+
+This research shows that altruism has complex and sometimes counterintuitive effects. It can increase stability and reduce random shocks, but without redistribution, it may also reinforce structural advantages. Importantly, it also boosts total economic output by encouraging savings and capital accumulation. For policymakers and scholars, these findings point to the need to consider both the distributional and macroeconomic effects of intergenerational preferences.
+
+\newpage
+
+
+# Appendix
+
+## Appendix A: Analytic Notes
+### Class Determination
+
+In the model, agents inherit their parent's class (either "rich" or "poor") with some probability of moving to the other class. This process is formally defined by a simple two-state Markov chain. Over time, even though individual class transitions are random, the class structure of the population settles into a stable pattern. This pattern is called the stationary distribution.
+
+The stationary distribution is the long-run share of agents in each class that remains constant across generations. Once the system reaches this distribution, applying the transition rules doesn't change it.
+
+Formally, if $\pi = (\pi_{\text{rich}}, \pi_{\text{poor}})$ is the distribution of class types in a given generation, and $T$ is the class transition matrix, then the stationary distribution satisfies [@chang_markov]:
+
+$$
+\pi T = \pi, \quad \text{and} \quad \pi_{\text{rich}} + \pi_{\text{poor}} = 1
+$$
+
+In this model, the transition matrix $T$ is:
+
+$$
+T =
+\begin{bmatrix}
+0.9 & 0.1 \\
+\frac{1}{30} & \frac{29}{30}
+\end{bmatrix}
+$$
+
+This means:
+
+- Rich-born agents stay rich with 90% probability and become poor with 10% probability.
+- Poor-born agents stay poor with probability $\frac{29}{30}$, and become rich with probability $\frac{1}{30}$.
+
+
+To find the stationary distribution, we solve:
+
+$$
+\pi_{\text{rich}} = 0.9 \cdot \pi_{\text{rich}} + \frac{1}{30} \cdot \pi_{\text{poor}}
+$$
+
+Subtracting $0.9 \cdot \pi_{\text{rich}}$ from both sides:
+
+$$
+0.1 \cdot \pi_{\text{rich}} = \frac{1}{30} \cdot \pi_{\text{poor}}
+$$
+
+Multiply both sides by 30:
+
+$$
+3 \cdot \pi_{\text{rich}} = \pi_{\text{poor}}
+$$
+
+Substitute into the normalization condition:
+
+$$
+\pi_{\text{rich}} + \pi_{\text{poor}} = 1 \Rightarrow \pi_{\text{rich}} + 3 \cdot \pi_{\text{rich}} = 1 \Rightarrow 4 \cdot \pi_{\text{rich}} = 1
+$$
+
+So:
+
+$$
+\pi_{\text{rich}} = \frac{1}{4}, \quad \pi_{\text{poor}} = \frac{3}{4}
+$$
+
+These values mean that in the long run, 25% of agents are expected to be rich and 75% poor, regardless of the initial class distribution. This result confirms the behavior observed in the simulation: while individual transitions are random, the law of large numbers ensures that class shares converge to this stable distribution in large populations.
+
+### Constant Returns to Scale
+
+The production side of the model assumes a Cobb-Douglas production function with constant returns to scale (CRS). Specifically, output in each generation is given by:
+
+$$
+Y = K^{\alpha} L_r^{\beta} L_p^{\gamma}
+$$
+
+where:
+
+- $K$ is aggregate capital,
+
+- $L_r$ is labor supplied by rich agents,
+
+- $L_p$ is labor supplied by poor agents,
+
+- $\alpha, \beta, \gamma > 0$,
+
+- and $\alpha + \beta + \gamma = 1$.
+
+
+This parameter restriction ensures CRS. That is, for any scalar $\lambda > 0$:
+
+\begin{align*}
+F(\lambda K, \lambda L_r, \lambda L_p) &= (\lambda K)^{\alpha}(K L_r)^{\beta}(K L_p)^{\gamma}\\
+&= \lambda^{\alpha+\beta+\gamma}K^{\alpha} L_r^{\beta} L_p^{\gamma}\\
+F(\lambda K, \lambda L_r, \lambda L_p) &= \lambda F(K, L_r, L_p)
+\end{align*}
+
+
+With CRS, output grows in proportion to the overall scale of the economy. If capital and labor inputs all increase together, output rises at the same rate. This allows the model to isolate the effects of savings, bequests, and class dynamics without introducing artificial gains from size. Because population and capital both evolve endogenously, proportional scaling ensures that long-run comparisons are not distorted by the overall scale of the economy.
+
+It also means that firms within the economy face no proportional advantage based on size. A firm that is twice as large, using twice as much capital and labor, produces exactly twice as much output. There are no scale advantages or disadvantages.
+
+### Derivation of First-Order Conditions
+
+The firm rents capital and hires labor in perfectly competitive markets. It takes prices as given: the rental rate of capital $r$, and the wages for rich and poor labor, $w_r$ and $w_p$. The firm’s profit function is:
+
+$$
+\Pi = Y - rK - w_r L_r - w_p L_p = K^\alpha L_r^\beta L_p^\gamma - rK - w_r L_r - w_p L_p
+$$
+
+The firm chooses $K$, $L_r$, and $L_p$ to maximize profit. The first-order conditions are obtained by taking the partial derivatives of $\Pi$ with respect to each input and setting them equal to zero.
+
+#### Capital
+
+\begin{align*}
+\frac{\partial \Pi}{\partial K} &= \frac{\partial Y}{\partial K} - r \\
+0 &= \alpha K^{\alpha - 1} L_r^\beta L_p^\gamma - r \\
+ r &= \alpha K^{\alpha - 1} L_r^\beta L_p^\gamma
+\end{align*}
+
+Alternatively, since $Y = K^\alpha L_r^\beta L_p^\gamma$, we can write:
+
+
+$$
+r = \alpha \frac{Y}{K}
+$$
+
+
+#### Rich Labor
+
+\begin{align*}
+\frac{\partial \Pi}{\partial L_r} &= \frac{\partial Y}{\partial L_r} - w_r \\
+0 &= \beta K^{\alpha} L_r^{\beta - 1} L_p^\gamma - w_r \\
+ w_r &= \beta K^{\alpha} L_r^{\beta - 1} L_p^\gamma
+\end{align*}
+
+
+Or, equivalently:
+
+$$
+w_r = \beta \frac{Y}{L_r}
+$$
+
+#### Poor Labor
+
+\begin{align*}
+\frac{\partial \Pi}{\partial L_p} &= \frac{\partial Y}{\partial L_p} - w_p \\
+0 &= \gamma K^{\alpha} L_r^\beta L_p^{\gamma-1} - w_p \\
+ w_p &= \gamma K^{\alpha} L_r^\beta L_p^{\gamma-1}
+\end{align*}
+
+Or:
+
+$$
+w_p = \gamma \frac{Y}{L_p}
+$$
+
+
+### Zero Profit and Representative Firms
+
+Zero-profit is a key assumption of perfect competition which states that in the long run, a firm's revenue is exactly equal to its costs. 
+
+Under perfect competition, factors are paid their marginal products:
+
+$$
+r = \frac{\partial Y}{\partial K}, \quad
+w_r = \frac{\partial Y}{\partial L_r}, \quad
+w_p = \frac{\partial Y}{\partial L_p}
+$$
+
+Which are:
+
+$$
+\begin{aligned}
+r &= \alpha K^{\alpha - 1} L_r^{\beta} L_p^{\gamma} \\
+w_r &= \beta K^{\alpha} L_r^{\beta - 1} L_p^{\gamma} \\
+w_p &= \gamma K^{\alpha} L_r^{\beta} L_p^{\gamma - 1}
+\end{aligned}
+$$
+
+Multiplying each marginal product by its respective factor quantity gives the cost of each factor for the firms:
+
+$$
+\begin{aligned}
+rK &= \alpha Y \\
+w_r L_r &= \beta Y \\
+w_p L_p &= \gamma Y
+\end{aligned}
+$$
+
+Summing gives total cost:
+
+$$
+rK + w_r L_r + w_p L_p = (\alpha + \beta + \gamma) Y = Y
+$$
+
+Profit equals output minus costs:
+
+$$
+\Pi = Y - (rK + w_r L_r + w_p L_p) = 0
+$$
+
+Under constant returns to scale and perfect competition, firms pay out all of their output as wages and capital returns. This results in zero profits.
+
+
+### Limit of CRRA Utility
+We want to prove that the constant relative risk aversion (CRRA) utility function
+
+$$
+u(c) = \frac{c^{1 - \eta}-1}{1 - \eta}
+$$
+
+converges to the natural log function as $\eta \to 1$. That is,
+
+$$
+\lim_{\eta \to 1} \frac{c^{1 - \eta} - 1}{1 - \eta} = \ln(c)
+$$
+
+\textbf{Proof:}
+
+Let us denote the function as
+
+$$
+f(\eta) = \frac{c^{1 - \eta}-1}{1 - \eta}
+$$
+
+As $\eta \to 1$, the numerator and denominator both approach 0, so this is an indeterminate form of type $0/0$, and we may apply L'Hôpital's Rule:
+
+$$
+\lim_{\eta \to 1} f(\eta) = \lim_{\eta \to 1} \frac{d}{d\eta} \left(c^{1 - \eta} - 1\right) \bigg/ \frac{d}{d\eta} \left(1 - \eta\right)
+$$
+
+Compute the derivatives:
+
+$$
+\frac{d}{d\eta} \left(c^{1 - \eta} - 1\right) = -c^{1 - \eta} \ln(c), \quad \frac{d}{d\eta}(1 - \eta) = -1
+$$
+
+So,
+
+$$
+\lim_{\eta \to 1} f(\eta) = \lim_{\eta \to 1} \frac{-c^{1 - \eta} \ln(c)}{-1} = \ln(c)
+$$
+
+\textbf{Q.E.D.}
+
+## Appendix B: Computational Methods
+
+### Class Determination
+In each generation, agents inherit their parent’s class—either “rich” or “poor”—subject to a probabilistic mobility rule. A value $U \sim \text{Unif}(0, 1)$ is drawn using R’s `runif()` function. If the parent is in class $ i $, the child retains that class if $ U < 1 - p_i $; otherwise, the child switches to the other class.
+
+The probabilities are set to:
+
+$$
+p_{\text{rich}} = \frac{1}{10}, \quad p_{\text{poor}} = \frac{1}{30}
+$$
+
+These values were chosen to yield approximately stable population shares: about 25% rich and 75% poor agents over time. Although transitions are random at the individual level, large simulated populations ensure that aggregate class proportions remain close to their expected values in each generation.
+
+### Stochastic Mortality and Inverse Transform Sampling
+
+In the simulation, agents are assigned a stochastic age of death at birth using inverse transform sampling from real-world actuarial data. This allows us to reflect realistic mortality risk while maintaining a two-period model structure. Agents do not know their actual age of death, only the probability distribution over lifespans.
+
+Using the 2021 Actuarial Table from the Social Security Administration, we are able to find death-by-age data. We can normalize this so that total deaths is a cumulative probability distribution of death from ages 0 to 119.
+
+```{r, echo = FALSE}
+Social_Security_Deaths_2021 <- read_csv(".github/workflows/Social Security Deaths 2021.csv")
+```
+
+
+```{r, echo = FALSE}
+#| label: fig-death-age
+#| fig-cap: "Cummulative probability of death by age."
+#| fig-pos: 'H'
+#| echo: false
+#| message: false
+#| warning: false
+
+cdf_data <- Social_Security_Deaths_2021 |> 
+  mutate(cdf = `total deaths`/205000) 
+  
+ggplot(cdf_data, aes(x = age, y = cdf))+
+         geom_line(color = "#F8766d")+
+  labs(x = "Age", 
+       y = "CDF") 
+```
+
+It is possible to generate data according to a cumulative distribution function through a process known as inverse transform sampling.
+
+We generate $U \sim \text{Unif}(0,1)$, which is a random number between 0 and 1 and acts as a target probability. To generate a random age, we choose the least $X$ such that $F(X) \ge U$. That is, we choose the smallest age $X$ for which the cumulative probability of dying by that age is greater than or equal to the uniform draw. With this method, any percentile of age at death is equally likely, and the actual ages of death reflect the original distribution.
+
+```{r, echo = FALSE}
+# Function for inverse transform sampling
+inverse_transform_sampling <- function(cdf_data, n_samples) {
+  # Step 1: Generate `n_samples` uniform random numbers between 0 and 1
+  uniform_randoms <- runif(n_samples)
+  
+  # Step 2: For each random number, find the corresponding value in the CDF
+  sampled_values <- sapply(uniform_randoms, function(u) {
+    # Find the smallest `age` where `cdf >= u`
+    age_sampled <- cdf_data$age[min(which(cdf_data$cdf >= u))]  
+    return(age_sampled)
+  })
+  
+  return(sampled_values)
+}
+
+death_age <- inverse_transform_sampling(cdf_data, rich_population+poor_population)
+
+```
+
+In @fig-generated-deaths, 100,000 death ages have been generated using this method. We compare their density (in green) to the true probability density from the actuarial table (in red). Unlike the cumulative distribution, this shows the probability of death at a specific age.
+
+```{r, echo = FALSE}
+n_samples <- 100000
+random_samples <- inverse_transform_sampling(cdf_data, n_samples)
+
+
+true_prob_deaths <- Social_Security_Deaths_2021 |>
+  mutate(deaths_at_age = `total deaths` - lag(`total deaths`, default = first(`total deaths`))) |>
+  mutate(prob_of_death = deaths_at_age/205000)
+  
+  
+# Create a data frame of generated ages for histogram
+generated_ages_df <- data.frame(age = random_samples)
+```
+
+```{r, echo = FALSE}
+#| label: fig-generated-deaths
+#| fig-cap: "Comparison of Probability of Death vs Generated Ages."
+ggplot() +
+  #pdf (line)
+  geom_line(data = true_prob_deaths, aes(x = age, y = prob_of_death), color = "#F8766d", size = 1) +
+  
+  #generated ages (density)
+  geom_density(data = generated_ages_df, aes(x = age), fill = "#00bfc4", alpha = 0.5) +
+  
+  labs(
+       x = "Age", 
+       y = "Density") 
+```
+
+In the model, we assume that all deaths occur between ages 0 and 100 for simplicity. To enforce this, we assign a death probability of $1 -$ the cumulative probability of dying on or before age 99 to age 100.
+
+```{r, echo = FALSE}
+death_age <- inverse_transform_sampling(cdf_data, rich_population+poor_population)
+```
+
+```{r, echo = FALSE}
+optimize_bequest <- function(wealth, delta, zeta, eta, sigma) {
+  inner_utility <- function(b_tp1) {
+    if (b_tp1 <= 0 || b_tp1 >= wealth) return(-Inf) #if planned bequest > wealth, not possibles
+    c_tp1 <- wealth - b_tp1 #c = w-b
+    return(delta * u(c_tp1, eta) + zeta * v(b_tp1, sigma)) #inner opt. problem
+  }
+  
+  result <- optimize(inner_utility, interval = c(0.001, wealth - 0.001), maximum = TRUE)
+  
+  return(list(
+    b_tp1 = result$maximum,
+    c_tp1 = wealth - result$maximum
+  ))
+}
+```
+
+```{r, include = FALSE}
+#| label: fig-life-savings
+#| fig-cap: "Illustration of agent's saving over lifespan."
+
+# Create a data frame for two time periods
+data <- tibble(
+  time = c(0,1,1,1.5,2),
+  gross_savings = c(0,5,5*1.2,3,0),
+  gross_savings_beq = c(0,5,(5+1)*1.2,3,3) 
+)
+
+# Create the ggplot
+ggplot(data) +
+  geom_line(aes(x = time, y = gross_savings_beq, color = "Gross Savings Plus Inheritance"), size = 1) +
+  geom_line(aes(x = time, y = gross_savings, color = "Gross Savings"), size = 1, linetype = "dashed") + 
+  labs(title = "Agent's Saving Over Lifespan",
+       x = "Time Period",
+       y = "Amount",
+       color = "Variable") +
+  scale_color_manual(values = c("Gross Savings" = "#00bfc4", "Gross Savings Plus Inheritance" = "#F8766d")) +
+  theme_minimal() +
+  theme(legend.position = "top")
+```
+
+## Appendix C: Statistical Result Methods
+
+### Tracking Inequality
+
+Wealth inequality is tracked in two ways. The first is a collection of metrics relating to wealth within a class. For example, the share of capital owned by "rich" class type agents at a particular time step. I found these measures to be highly variable over time when there is stochastic class mobility. This is because an agent with a lot of wealth from bequests who earns a low wage is technically a member of the "poor" class and vice versa. Unsurprisingly, eliminating class mobility significantly decreases variability in these wealth metrics.
+
+The other way wealth inequality is tracked is using the Gini Coefficient. The Gini Coefficient is a well-known statistical measure of inequality. It ranges from 0 to 1 with 1 being absolute inequality and 0 being no inequality. Unlike the inequality measurements described above, the Gini coefficient does not aggregate based on class. Instead, it considers each individual. An advantage of using agent-based modeling is that agents make consumption optimization decisions hetergenously, allowing us to use something like the Gini Coefficient.
+
+We compute the Gini Coefficient using the method described in Cowell, F.A. (2011). Particularly, we use the formula for the "discrete Gini Index" [@cowell2011].
+
+Here, the Gini coefficient $G$ is computed
+
+$$
+G = \frac{2 \sum_{i=1}^{n} i x_i}{n \sum_{i=1}^{n} x_i} - \frac{n + 1}{n}
+$$ Where $x_i$ is the $i$th agent's wealth, sorted in ascending order, and $n$ is the total number of agents. Each agent's wealth is multiplied by their rank, so wealthier individuals are weighted more heavily in the computation of the numerator of the first term. This is dividided by the denominator, which sums total wealth in the economy multiplied by population. The denominator here acts as a normalizing factor so that $G$ is only affected by inequality, not absolute levels of wealth. The denominator also serves to compare the numerator against an economy with no inequality.
+
+In a perfectly equal economy, $x_i = x$ for all $i$ where $x$ is some constant. Then, the numerator of the first term has
+
+```{=tex}
+\begin{align*}
+\sum_{i=1}^{n} i x_i &= \sum_{i=1}^{n} i x\\
+&= x\sum_{i=1}^{n} i \\
+&= x \frac{n(n+1)}{2}
+\end{align*}
+```
+The denominator would have
+
+```{=tex}
+\begin{align*}
+n\sum_{i=1}^{n}x_i &= n\sum_{i=1}^{n} x\\
+&= n^2x
+\end{align*}
+```
+Plugging these back into the formula for $G$, we see
+
+```{=tex}
+\begin{align*}
+G &= \frac{2 \sum_{i=1}^{n} i x_i}{n \sum_{i=1}^{n} x_i} - \frac{n + 1}{n}\\
+&= \frac{2x \frac{n(n+1)}{2}}{n^2x}\\
+&= \frac{n^2x + x}{n^2x} - \frac{n + 1}{n}\\
+&= \frac{n + 1}{n} - \frac{n + 1}{n}\\
+&= 0
+\end{align*}
+```
+On the other hand, if 1 person has all the wealth we can see that the Gini Coefficient is very close to 1.
+
+Lets say someone has $x_i = x >0$ and everyone else has $x_i = 0$ x_1 = x_2 = \dots = x\_{n-1} = 0, \quad x_n = x
+
+Then the numerator is $$\sum_{i=1}^{n} i x_i = 1 \cdot 0 + 2 \cdot 0 + \dots + (n-1) \cdot 0 + n \cdot x = nx$$
+
+And the denominator is $$n \sum_{i=1}^{n} x_i = n \cdot x$$
+
+We plug these into the full formula and find \begin{align*}
+G &= \frac{2 \sum_{i=1}^{n} i x_i}{n \sum_{i=1}^{n} x_i} - \frac{n+1}{n}\\
+&= \frac{2 \cdot nx}{n \cdot x} - \frac{n+1}{n}\\
+&= \frac{2n}{n} - \frac{n+1}{n}\\
+&= 2 - \frac{n+1}{n}
+\end{align*}
+
+$$
+G = \frac{2n - (n + 1)}{n} = \frac{n - 1}{n}
+$$
+
+The limit of $G$ as $n$ approaches infinity is 1.
+
+### A note on high interest rates
+
+In the model, the interest rate, $R$, is endogenous and determined by the marginal product of capital. Compared to real-world steady-state interest rates of 0.5% - 2%, our simulated $R$ yields elevated interest rates between $15\%$ and $40\%$ depending on other parameter values. Although this is higher than we would like, its not uncommon for two-period OLG models, such as ours to have a higher interest rates. In a two period model, agents only have two opportunities to spend and save. This makes accumulating wealth somewhat difficult. Similar inflation rates are found in other agent-based OLG models (e.g. Chen and Yeh, 1999).
+
+In some ways, a higher interest rate is more realistic, when we consider that each time step is supposed to correspond to roughly 40 years of consumer behavior. In the real world, if an agent saves about a third of their income, as is plausible in our model, we would certainly expect the rate of return on those savings to be more than 2% by the time they are ready to retire.
+
+As an example, an agent earns a cummulative wage $w$ over the ages of 20 to 60. Our model takes an assumption of linear income and consumption, so this corresponds to a yearly wage of $\frac{w}{40}$. In equilibrium in our model, it could be reasonable for an agent to save a third of their wages. So, yearly, they save $\frac{w}{120}$ and invest it, earning a 2% return on all accumulated savings.
+
+The future value of their savings can be calculated with the annuity formula
+
+```{=tex}
+\begin{align*}
+FV &= C\frac{{(1+r)}^n-1}{r}\\
+&= \frac{w}{120}\frac{{(1+0.02)}^{40}-1}{0.02}\\
+&= \frac{w}{120}60.4\\
+&= 0.503 w
+\end{align*}
+```
+So, by the age of retirement their savings will be $0.503 w$, even though they only set aside $\frac{w}{3}$. As an interest rate over 40 years (not annually), this translates to a model interest rate of roughly 50% }$\frac{\frac{w}{2}}{\frac{w}{3}} = \frac{1}{2}$). In order to maintain comparable opportunities for wealth accumulation, it makes sense that our model might require higher interest rates than we would expect.
+
+To put simulated interest rates into perspective, we'll assume the same premise and work backwards using our most common steady-state interest rate of 30% to find what "real-world interest rate" this translates to.
+
+For $R = 1.3$,
+
+```{=tex}
+\begin{align*}
+0.3 &= \frac{FV}{\frac{w}{3}}\\
+0.1w &= FV
+\end{align*}
+```
+So, we have
+
+```{=tex}
+\begin{align*}
+0.1w &= \frac{w}{120}\frac{{(1+r)}^{40}-1}{r}\\
+0.1 &= \frac{{(1+r)}^{40}-1}{120r}
+\end{align*}
+```
+This equation cannot be solved algebraically for $r$, but it can be solved numerically to find that $r \approx 0.6%$. This is within the range of long-term interest rates in the United States of 0.5% - 2% given by the federal reserve @yi2016.
+
+### Small Tail Reductions Cause Large Kurtosis Changes
+
+We show formally that small reductions in extreme tail behavior can lead to disproportionately large declines in measured kurtosis.
+
+Recall that kurtosis is defined as:
+
+$$
+\text{Kurtosis}(X) = \frac{\mathbb{E}[(X - \mu)^4]}{\sigma^4},
+$$
+
+where $\mu$ is the mean and $\sigma^2$ is the variance of $X$.
+
+Suppose that initially, a small probability mass $\epsilon$ is located at a large value $L$ far from the mean $\mu$. The contribution of this mass to the fourth moment $\mathbb{E}[(X - \mu)^4]$ is approximately:
+
+$$
+\epsilon (L - \mu)^4.
+$$
+
+Now suppose altruism induces a small reduction $\delta$ in the size of extreme wealth, so that $L$ is replaced by $L' = L - \delta$, with $\delta > 0$ and small relative to $L$.
+
+Then the change in the fourth moment is:
+
+$$
+\Delta M_4 = \epsilon \left[ (L - \delta - \mu)^4 - (L - \mu)^4 \right].
+$$
+
+Expanding $(L - \delta - \mu)^4$ using a first-order Taylor approximation around $\delta = 0$, we obtain:
+
+$$
+(L - \delta - \mu)^4 \approx (L - \mu)^4 - 4(L - \mu)^3 \delta,
+$$
+
+where higher-order terms in $\delta$ are neglected because $\delta$ is small.
+
+Substituting this back into the expression for $\Delta M_4$ gives:
+
+$$
+\Delta M_4 \approx -4\epsilon (L - \mu)^3 \delta.
+$$
+
+Thus, the change in the fourth moment --- and hence the numerator of kurtosis --- is proportional to $(L - \mu)^3$ times $\delta$.
+
+Since $L - \mu$ is large for extreme outliers, even a small $\delta$ leads to a large absolute reduction in the fourth moment. Meanwhile, the denominator $\sigma^4$ changes comparatively little, because the variance is dominated by typical, non-extreme values.
+
+Therefore, small reductions in extreme tail values cause large proportional declines in kurtosis. A similar argument applies to skewness, which depends on the third moment $\mathbb{E}[(X - \mu)^3]$ and thus reacts similarly, though somewhat less extremely.
+
+### Distributional Moments Under Linear Transformations
+
+For the below proofs, assume a base distribution of $X_0$ and a transformed distribution $X_1 = aX_0 + b$, with means $\mu_0$ and $\mu_1$.
+
+Skewness, the third moment is given by $$
+\text{Skewness} = \frac{E[(X - \mu)^3]}{\sigma^3}
+$$ Skewness of $X_1$ would be \begin{align*}
+\text{Skew}_{0.1} &= \frac{E[(aw_0-b - (a\mu-b))^3]}{(a\sigma_0)^3}\\
+&= \frac{E[(ax_0 - a\mu)^4]}{a^3\sigma^3}\\
+&= \frac{a^3E[(x_0 - \mu)^4]}{a^3\sigma^3}\\
+&= \frac{E[(x_0 - \mu)^3]}{\sigma^3}\\
+&= \text{Skew}_0.1
+\end{align*}
+
+Kurtosis is given by $$
+\text{Kurtosis} = \frac{E[(X - \mu)^4]}{\sigma^4} - 3
+$$
+
+Kurtosis of $X_1$ would be
+
+```{=tex}
+\begin{align*}
+\kappa_{1} &= \frac{E[(ax_0-b - (a\mu-b))^4]}{(a\sigma_0)^4} - 3\\
+&= \frac{E[(ax_0 - a\mu)^4]}{a^4\sigma^4} - 3\\
+&= \frac{a^4E[(x_0 - \mu)^4]}{a^4\sigma^4} - 3\\
+&= \frac{E[(x_0 - \mu)^4]}{\sigma^4} - 3\\
+&= \kappa_0
+\end{align*}
+```
+### Normalized Distributions
+
+A distribution $X$ is normalized so that its mean, $\mu$ is 0 and its standard deviation, $\sigma$ is 1 by calculating $X^{\text{std}} = \frac{X - \mu}{\sigma}$.
+
+After normalization, any distributions linked by a location-scale transformation such that $X_1 = aX_0 +b$ will be identical.
+
+```{=tex}
+\begin{align*}
+X_{1}^{\text{std}} &= \frac{X_{1} - \mu_1}{\sigma_1}\\
+&= \frac{aX_0+b - (a\mu_0 + b)}{a\sigma_0}\\
+&= \frac{a(X_0 - \mu_0)}{a\sigma_0}\\
+&= \frac{X_0-\mu_0}{\sigma_0}\\
+&= X_0^{\text{std}}
+\end{align*}
+```
+### Relative Distribution Analysis
+
+This method, developed by Hancock and Morris (1999), compares 2 distributions: a baseline (in our case when $\zeta = 0$, call it $W_0$) and a comparison ($\zeta = 0.1$, call it $W_{0.1}$). You map each observation from the comparison distribution into the quantile space of the baseline. That is, for each observation in the new distribution, say $w^{(i)}_{0.1}$, calculate the cummulative distribution function of the old distribution of that observation. If $F_0$ is the CDF of the wealth distribution without altruism, $W_0$, then the relative distribution $R_0$ is defined:
+
+$$R(w^{(i)}_{0.1}) = F_0(w^{(i)}_{0.1})$$
+
+For example, if an observation of wealth in the new period is that some agent $i$ has $w^{(i)}_{0.1} = 1$, we ask "In the economy without altruism, what fraction of agents had wealth less than or equal to 1?". If this fraction of agents was, say, 80%, then We define $R(1) = 0.8$.
+
+If the two compared distributions are identical, the CDF of $R$ is a 45 degree line and the PDF of R, known as the relative density function, is uniform. Deviations of the baseline distribution at the percentile level can be visualized with deviations from uniformity in the PDF of $R$ [@relative1999].
+
+### Theoretical Gini Coefficient
+To develop intuition for how wealth inequality is affected by the distribution of wealth across types, we can calculate the Gini coefficient in a case where all agents within a group hold the same wealth. Suppose that every poor agent has wealth equal to:
+
+$$
+w_p = 0.045
+$$
+
+and every rich agent has:
+
+$$
+w_r = 0.112
+$$
+
+These numbers are in line with the empirical averages in the case without altruism.
+
+Poor agents make up 75% of the population, so:
+
+$$
+p_p = 0.75, \quad p_r = 0.25
+$$
+
+The mean wealth in the population is:
+
+$$
+\mu = p_p \cdot w_p + p_r \cdot w_r = 0.75 \cdot 0.045 + 0.25 \cdot 0.112 = 0.06175
+$$
+
+The Gini coefficient for a discrete distribution is defined as:
+
+$$
+G = \frac{1}{2\mu} \sum_i \sum_j p_i p_j |w_i - w_j|
+$$
+
+With two groups, the within-group terms vanish (since $|w_i - w_i| = 0$), so we are left with:
+
+$$
+G = \frac{1}{2\mu} \cdot 2 \cdot p_p \cdot p_r \cdot |w_p - w_r|
+$$
+
+Substituting values:
+
+$$
+G = \frac{1}{2 \cdot 0.06175} \cdot 2 \cdot 0.75 \cdot 0.25 \cdot |0.045 - 0.112| = \frac{0.025125}{0.1235} \approx 0.204
+$$
+
+
+## Appendix D: Statistical Test Results
+
+### Effect of Altruism on Inequality Measures
+\begin{tabular}{lrrrl}
+\toprule
+ Measure                         & No Altruism & Altruism & Direction & p-value \\
+\midrule
+ Wealth Gini      & 0.624  & 0.466  & ↓ & $< 10^{-16}$ \\
+ Consumption Gini & 0.328  & 0.321  & ↓ & 0.012 \\
+ \% Wealth Owned by Rich         & 36.0\%      & 39.6\%   & ↑         & $< 10^{-6}$ \\
+\% Rich Consumption & 69.1\%        & 69.0\%     & ↓         & $0.94$ \\
+\bottomrule
+\end{tabular}
+
+### Effect of Altruism on Distributional Statistics
+\begin{tabular}{lrrrr}
+\toprule
+ Statistic        & No Altruism ($\zeta=0$) & Altruism ($\zeta=0.1$) & Direction & p-value \\
+\midrule
+ Skewness (Rich)  & 9.49   & 5.32   & ↓ & $\approx 0$ \\
+ Skewness (Poor)  & 13.75  & 8.01   & ↓ & $\approx 0$ \\
+ Kurtosis (Rich)  & 138.6  & 48.1   & ↓ & $\approx 0$ \\
+ Kurtosis (Poor)  & 281.3  & 99.0   & ↓ & $\approx 0$ \\
+ Variance (Rich)  & 0.0112 & 0.0068 & ↓ & $< 10^{-10}$ \\
+ Variance (Poor)  & 0.0043 & 0.0022 & ↓ & $< 10^{-10}$ \\
+\bottomrule
+\end{tabular}
+
+### Orphans vs. Non Orphans Without Altruism
+\begin{tabular}{lrrrl}
+\toprule
+ Statistic          & Orphans & Non-Orphans & Direction & p-value \\
+\midrule
+ Mean Bequest       & 0.0433  & 0.0188      & ↑         & $< 10^{-16}$ \\
+ Variance (Bequest) & 0.0035  & 0.0012      & ↑         & $< 10^{-6}$ \\
+ Gini Coefficient   & 0.397   & 0.651       & ↓         & $< 10^{-16}$ \\
+\bottomrule
+\end{tabular}
+
+## Appendix E: Parameter Values and Estimations
+
+```{=tex}
+\begin{table}[H]
+\centering
+\begin{tabular}{ll}
+\hline
+\textbf{Parameter} & \textbf{Description} \\
+\hline
+$\alpha$ & Capital share in the Cobb-Douglas production function \\
+$\beta$ & Output elasticity of rich labor \\
+$\gamma$ & Output elasticity of poor labor \\
+$\delta$ & Discount factor for future consumption utility \\
+$\zeta$ & Weight on utility from bequests \\
+$\eta$ & CRRA coefficient for consumption utility (risk aversion) \\
+$\sigma$ & CRRA coefficient for bequest utility (risk aversion) \\
+$r$ & Interest rate (return on savings) \\
+$R$ & Gross return on savings ($1 + r - \text{depreciation}$) \\
+$p_i$ & Probability of death at age $i$ (from mortality distribution) \\
+$b_t$ & Bequest received from parent \\
+$b_{t+1}$ & Bequest left by current agent to child \\
+$c_t$ & Consumption during working-age (young period) \\
+$c_{t+1}$ & Consumption during retirement (old period) \\
+$s$ & Savings in young period \\
+$w$ & Wages (depends on agent type: rich or poor) \\
+$K$ & Aggregate capital in the economy (total savings of retirees) \\
+$L_r$ & Total labor supplied by rich agents \\
+$L_p$ & Total labor supplied by poor agents \\
+$MPL_r$ & Marginal product of rich labor (determines rich wage) \\
+$MPL_p$ & Marginal product of poor labor (determines poor wage) \\
+$MPK$ & Marginal product of capital (used to compute $r$) \\
+$k$ & Substitution constant: $k = \left(\frac{\delta}{\zeta}\right)^{1/\sigma}$ \\
+\hline
+\end{tabular}
+\end{table}
+```
+#### $\alpha$, $\beta$, and $\gamma$
+
+In line with standard economic practice, we set $\alpha = 0.3$. In order to maintain constant scale of returns, we require that $\alpha + \beta + \gamma = 1$. So, we have the constraint $\beta + \gamma = 0.7$.
+
+To find adequate values of $\beta$ and $\gamma$, we can recall that the rich wage, $MPL_r = \frac{\beta Y}{L_r}$ and the poor wage, $MPL_p = \frac{\gamma Y}{L_p}$. Even though there is stochastic class movement, paramters there are balanced to maintain relatively constant rich and poor type populations. Thus, both rich and poor wages increase linearly with growth in $Y$, output. This also means that they maintain a constant proportion to eachother.
+
+We can decide we want the rich wage to constantly be some multiple of the poor wage. Then
+
+```{=tex}
+\begin{align*}
+\frac{MPL_r}{MPL_p} &= \frac{\beta Y}{L_r} \cdot \frac{L_p}{\gamma Y} \\
+&= \frac{\beta}{\gamma}\cdot \frac{L_p}{L_r}
+\end{align*}
+```
+The populations $L_p$ and $L_r$ stay relatively constant at 750 and 250, respectively. So,
+
+$$ 
+\frac{MPL_r}{MPL_p} = \frac{3\beta}{\gamma}
+$$ 
+
+The U.S. Bureau of Labor Statistics shows that the top quartile of full time workers earns about 3 times the weekly wage or salary of the bottom quartile @USBLS .
+
+So, we have $3 = \frac{3\beta}{\gamma}$, or $\beta = \gamma$. When we combine this with out other equation, $\beta + \gamma = 0.7$, we see that $\gamma = 0.35$ and $\beta = 0.35$.
+
+
+#### $\delta$
+
+Estimates for annual $\delta$, the consumption time-preference discount factor, are somewhat consistent. A common annual delta is 0.96, or a discount rate of 4% per year. Gourinchas and Parker (2002), find an annual discount factor of 0.9569 in a life-cycle model with CRRA utility and borrowing constraints. Similarly, Attanasio and Weber (1995) and Laibson et al. (2007) adopt discount factors from 0.95 to 0.97. For these reasons, we use an annual discount factor of 0.96.
+
+Our model has 2 life stages, with each stage corresponding to around 40 years. By taking $0.97^{40}$, we find a $\delta$ of around 0.3.
+
+#### $\eta$
+
+Empirical estimations of the CRRA risk aversion parameter for consumption have significant variation.For example, Mehra and Prescott (1985) showed that models with CRRA utility required high levels of risk aversion (approximately $\eta = 10$) in order to explain the margin by which equities out-perform risk free assets. On the other hand, Carroll (1997), who focuses on short-term consumption dynamics, calibrates CRRA coefficients of around 0.5.
+
+A meta-analysis by Havranek et al. (2021) of over a thousand estimates found estimates to generally range from 0.9 to 1.5 across economic and finance literature. While finance estimates tend to trend higher, economic estimates are concentrated around 1. In alignment with this, we use an $\eta$ value of 1, which is coincidentally the value for which $u(c) = ln(c)$.
+
+#### $\sigma$
+
+Although we proved that for bequests to increase proportionally with wealth, $\eta > sigma$, this isn't a necessarily standard approach. Some models, such as De Nardi (2004), calibrate a higher risk aversion parameter for bequests than consumption. The intuition for this is to focus on discouraging any small bequests, rather than encouraging growing bequests with wealth.
+
+Take the following graph of CRRA utility functions, one with a low risk averasion parameter, and one with a high risk aversion parameter:
+
+```{r, include = FALSE}
+library(ggplot2)
+library(tibble)
+
+#utility function
+crra_utility <- function(c, eta) {
+  if (eta == 1) {
+    return(log(c))
+  } else {
+    return((c^(1 - eta)) / (1 - eta))
+  }
+}
+
+# Normalize utility at c = 1 to align starting points
+normalize_utility <- function(u, c_values) {
+  u - u[which.min(abs(c_values - 1))]
+}
+
+# Consumption range
+c_values <- seq(0.01, 5, length.out = 200)
+
+# Utility curves
+u_eta_low <- normalize_utility(crra_utility(c_values, eta = 0.6), c_values)
+u_eta_high <- normalize_utility(crra_utility(c_values, eta = 3), c_values)
+
+# Combine into data frame
+crra_df <- tibble(
+  consumption = rep(c_values, 2),
+  utility = c(u_eta_low, u_eta_high),
+  eta = factor(rep(c("η = 0.6", "η = 3"), each = length(c_values)))
+)
+```
+
+```{r}
+ggplot(crra_df, aes(x = consumption, y = utility, color = eta, linetype = eta)) +
+  geom_line(linewidth = 1.2) +
+  labs(
+    title = "CRRA Utility Functions (Normalized at c = 1)",
+    x = "Consumption (or Bequest)",
+    y = "Utility (relative to c = 1)",
+    color = NULL,
+    linetype = NULL
+  ) +
+  coord_cartesian(ylim = c(-1, 2)) +
+  theme_minimal()
+```
+
+The function with a low $\eta$ is smooth, and you can see that as bequest rises, marginal utility of bequesting remains significant. So, rich agents are incentived to bequest more. With a high $\eta$, there is a steep rise the utility around bequest = 1. This discourages low bequest amounts, so that poor agents will choose not to bequest anything at all. On the other hand, rich agents have very low marginal utility of bequest after this point, so we wouldn't expect a very rich agent to bequest much more than an agent who barely makes the cutoff to bequest the "minimum" amount.
+
+I've chosen to prioritize $\eta > \sigma$, as it is more consistent with real world observations of bequests as a luxury good, and makes for a more tractible analysis. For this reason, we choose $\sigma = 0.9$.
+
+#### $\zeta$
+
+Intuitively, agents should weight their bequest less than their own consumption, so $\zeta < 0.3$. We chose $\zeta = 0$ or $\zeta = 0.1$ for our analysis. In the case that $\zeta = 0$, there are no altruistic bequests, and every bequest is entirely accidental. You can't exactly weight bequests by a time factor, since the agent bequesting will be dead when they are consumed, but we thought it made some sense that with $\zeta = 0.1$, bequests are weighted slightly higher than consumption if the agent were to live to another period.
+
+## Appendix F: Model Parameters and Their Descriptions
+
+```{=tex}
+\begin{table}[H]
+\centering
+\begin{tabular}{ll}
+\hline
+\textbf{Variable} & \textbf{Description} \\
+\hline
+\texttt{id} & Unique identifier for each agent \\
+\texttt{type} & Class type: "rich" or "poor" \\
+\texttt{wages} & Agent’s wage based on marginal product of labor \\
+\texttt{savings} & Amount saved by the agent in the young period \\
+\texttt{savings\_rate} & Initial savings rate (used in early setup) \\
+\texttt{death\_age} & Simulated age at death (drawn from SSA CDF) \\
+\texttt{orphan} & Orphan status: 0 = not orphaned, 1 = orphaned, 2 = very early orphan \\
+\texttt{available\_bequest\_young} & Inheritance available in the young period due to early parental death \\
+\texttt{actual\_bequest\_from\_parent} & Realized bequest inherited in the old period (if parent lived to retirement) \\
+\texttt{wealth} & Total wealth in old age: $(\texttt{savings} + \texttt{bequest}) \times R$ \\
+\texttt{planned\_c\_tp1} & Planned consumption in retirement \\
+\texttt{bequest\_amount} & Planned bequest to pass on to the next generation \\
+\texttt{realized\_bequest} & Actual bequest left, accounting for early death \\
+\texttt{optimal\_ct} & Optimal consumption in the young period (from utility maximization) \\
+\hline
+\texttt{time} & Time period (in \texttt{wealth\_history}) \\
+\texttt{total\_wealth} & Average wealth of class (rich or poor) at a given time \\
+\texttt{avg\_savings} & Average savings of the class at a given time \\
+\texttt{avg\_bequest} & Average planned bequest of the class \\
+\texttt{r} & Net interest rate (marginal product of capital minus depreciation) \\
+\hline
+\end{tabular}
+\caption{Simulation Variables and Their Descriptions}
+\end{table}
+```
+
+\newpage
+
+# References
+
+
